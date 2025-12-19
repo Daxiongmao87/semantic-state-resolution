@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+.venv/
+env/
+__pycache__/
+
+# System
+.DS_Store
+Thumbs.db
+
+# Generated
+*.log
+dist/
+build/
+coverage/
+
+# IDE
+.vscode/
+.idea/
+.gemini/
