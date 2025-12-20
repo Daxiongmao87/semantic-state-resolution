@@ -57,6 +57,21 @@ export class RoomHorizonQueue {
         this.activeCollapses = 0;
         this.objectEntities.clear();
         resetObjectIdCounter();
+
+        // Inject quest as hard constraint to all latent rooms
+        if (questTags.length > 0 && questTags[0]) {
+            const questConstraint: Constraint = {
+                key: 'quest_objective',
+                value: questTags[0],
+                strength: 1.0,
+                type: 'hard',
+                sourceEventId: 'quest_start'
+            };
+
+            for (const room of layout.rooms.values()) {
+                room.constraints.push(questConstraint);
+            }
+        }
     }
 
     /**
@@ -212,6 +227,10 @@ export class RoomHorizonQueue {
             // Create proper ObjectEntity instances for each slot
             await this.createRoomObjects(room, result);
 
+            // DETAILED LOGGING FOR DEBUGGING
+            console.log(`[Room Collapse] ${roomId} -> ${result.roomType} (${result.theme})`);
+            console.log(`[Room Objects] ${roomId} -> ${result.objectTypes.join(', ')}`);
+
             room.state = 'collapsed';
             room.collapsedAt = Date.now();
             queueItem.status = 'collapsed';
@@ -294,7 +313,7 @@ export class RoomHorizonQueue {
         }));
 
         const questContext = this.questTags.length > 0 && this.questTags[0]
-            ? `\n\nPLAYER'S QUEST: "${this.questTags[0]}"\nThis dungeon should feel relevant to the quest. Room themes, objects, and atmosphere should subtly support or relate to the quest goal.`
+            ? `\n\nCRITICAL CONTEXT: THE PLAYER'S QUEST IS: "${this.questTags[0]}"\nEverything in this room MUST reflect or relate to this quest. Avoid all generic dungeon cliches.`
             : '';
 
         const request: SolverRequest = {
@@ -309,8 +328,13 @@ export class RoomHorizonQueue {
                 questTags: this.questTags,
                 recentEvents,
                 instruction: room.components.isEntrance
-                    ? `This is the dungeon entrance, adjacent to the outside world. Create a unique threshold room that makes sense as a transition from the surface.${questContext}`
-                    : `Create a unique dungeon room. Consider the neighboring rooms' themes for coherence. Be creative - this could be anything from a flooded crypt to an abandoned alchemist's lab. Generate ${room.components.objectSlots.length} distinct objects that fit the room's character.${questContext}`
+                    ? `This is the dungeon entrance. Create a unique threshold room that serves as a transition into this specific quest-driven dungeon.${questContext}`
+                    : `Create a unique dungeon room. 
+
+CRITICAL VARIETY RULE: Check the neighboring rooms. You must generate a *different* type of room. If neighbors are 'throne_room', you must NOT create a 'throne_room'. Instead, create a supporting room (e.g., 'scullery', 'guard_post', 'secret_passage', 'torture_chamber').
+
+Generate ${room.components.objectSlots.length} distinct objects.
+IMPORTANT: Provide ONLY the high-level type (e.g., 'barrel', 'chest', 'rack', 'statue'). Do NOT add adjectives or details yet. Details will be generated later when the player inspects them.${questContext}`
             },
             constraints: {
                 hard: room.constraints,
@@ -318,9 +342,10 @@ export class RoomHorizonQueue {
             },
             // Schema requirements only - no content examples that could override quest context
             whitelist: {
+                // Schema requirements - structure is strict, content is open
                 requiredFields: ['room_type', 'theme', 'description', 'objects', 'tags'],
-                objectCount: room.components.objectSlots.length
-                // No examples - let quest context drive creativity
+                objectCount: room.components.objectSlots.length,
+                explanation: "Objects must be an array of SIMPLE strings (e.g. ['barrel', 'statue']). NO adjectives."
             }
         };
 
@@ -353,7 +378,7 @@ export class RoomHorizonQueue {
             if (typeof o === 'object' && o !== null && 'type' in o) {
                 return String((o as { type: unknown }).type);
             }
-            return 'chest';
+            return 'chest'; // Fallback only for totally malformed data
         });
     }
 

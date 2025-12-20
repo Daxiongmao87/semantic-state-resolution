@@ -239,22 +239,25 @@ async function collapseTile(
             description: 'A narrow passage'
         };
 
+        const questObj = room?.constraints.find(c => c.key === 'quest_objective');
+        const questContext = questObj ? `\n\nCRITICAL QUEST: "${questObj.value}"\nEnsure the description reflects this specific quest's theme (e.g. if fire quest, mention scorch marks or heat; if water quest, mention dampness or puddles).` : '';
+
         let instruction: string;
         switch (tileType) {
             case 'floor':
-                instruction = `Describe this section of floor in a ${roomContext.roomType} (${roomContext.theme}). What does the floor look like here? Are there cracks, stains, debris, patterns, inscriptions? 1-2 sentences of evocative detail.`;
+                instruction = `Describe this section of floor in a ${roomContext.roomType} (${roomContext.theme}). What does the floor look like here? Are there cracks, stains, debris, patterns, inscriptions? 1-2 sentences of evocative detail.${questContext}`;
                 break;
             case 'wall':
-                instruction = `Describe this section of wall in a ${roomContext.roomType} (${roomContext.theme}). What does the wall look like? Stonework, bricks, natural rock? Any carvings, moss, damage, torch sconces, hidden crevices? 1-2 sentences of evocative detail.`;
+                instruction = `Describe this section of wall in a ${roomContext.roomType} (${roomContext.theme}). What does the wall look like? Stonework, bricks, natural rock? Any carvings, moss, damage, torch sconces, hidden crevices? 1-2 sentences of evocative detail.${questContext}`;
                 break;
             case 'door':
-                instruction = `Describe this door leading out of a ${roomContext.roomType} (${roomContext.theme}). What is it made of? What condition? Any markings, locks, damage? 1-2 sentences of evocative detail.`;
+                instruction = `Describe this door leading out of a ${roomContext.roomType} (${roomContext.theme}). What is it made of? What condition? Any markings, locks, damage? 1-2 sentences of evocative detail.${questContext}`;
                 break;
             case 'void':
-                instruction = `The player looks into the darkness beyond the dungeon walls. What do they see or sense? 1-2 sentences of evocative, ominous detail.`;
+                instruction = `The player looks into the darkness beyond the dungeon walls. What do they see or sense? 1-2 sentences of evocative, ominous detail.${questContext}`;
                 break;
             default:
-                instruction = `Describe what the player sees when examining this area. 1-2 sentences.`;
+                instruction = `Describe what the player sees when examining this area. 1-2 sentences.${questContext}`;
         }
 
         const request: SolverRequest = {

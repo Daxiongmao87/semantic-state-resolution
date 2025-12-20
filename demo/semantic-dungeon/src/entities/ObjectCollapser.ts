@@ -37,6 +37,9 @@ export async function collapseObjectType(
     });
 
     try {
+        const questObj = obj.constraints.find(c => c.key === 'quest_objective');
+        const questContext = questObj ? `\n\nCRITICAL QUEST: "${questObj.value}"\nThis object MUST reflect this specific quest theme.` : '';
+
         const request: SolverRequest = {
             requestId: `collapse_object_type_${obj.id}_${Date.now()}`,
             taskType: 'COLLAPSE_OBJECT_TYPE',
@@ -46,7 +49,13 @@ export async function collapseObjectType(
                 roomTheme,
                 roomDescription,
                 position: obj.components.localPosition,
-                instruction: `This object exists in a ${roomType} (${roomTheme}). What IS this object? Don't describe it in detail yet - just identify what type of object it is. Be creative and contextual. Consider: what would naturally exist in this room? It could be furniture, a container, debris, something alive, something magical, machinery, remains, etc.`
+                instruction: `This object exists in a ${roomType} (${roomTheme}). What IS this object? 
+
+RULES:
+- Be creative and contextual.
+- Avoid generic dungeon clichés.${questContext}
+- Just identify the type of object (e.g., 'cracked magma-shard', 'water-logged chest', 'floating ember').
+- Respond with 2-3 tags for initial properties.`
             },
             constraints: {
                 hard: obj.constraints,
@@ -71,6 +80,9 @@ export async function collapseObjectType(
 
         // Stay in 'latent' state - type is known but not fully collapsed
         obj.state = 'latent';
+
+        console.log(`[Object Type Collapse] ${obj.id} (in ${roomType}) -> ${obj.components.objectType}`);
+
 
         eventLog.append({
             type: 'CollapseCommitted',

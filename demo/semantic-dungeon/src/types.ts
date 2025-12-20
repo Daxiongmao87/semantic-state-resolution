@@ -159,7 +159,7 @@ export interface ObjectComponents {
     objectType?: string;
     visualDesc?: string;
     contents?: string[];
-    interactionState?: 'closed' | 'open' | 'destroyed' | 'dormant' | 'active';
+    interactionState?: string;
 }
 
 // Monster Components
@@ -208,53 +208,18 @@ export interface QuestComponents {
     tags: string[];
 }
 
-// =============================================================================
-// Whitelists
-// =============================================================================
-
-export const ROOM_TYPES = [
-    'entrance_hall', 'corridor', 'chamber', 'shrine', 'treasury',
-    'monster_den', 'trap_room', 'puzzle_room', 'armory', 'library'
-] as const;
-
-export const ROOM_THEMES = [
-    'damp', 'ancient', 'corrupted', 'overgrown', 'scorched',
-    'frozen', 'crumbling', 'pristine', 'haunted', 'flooded'
-] as const;
-
-export const OBJECT_TYPES = [
-    'chest', 'altar', 'statue', 'bookshelf', 'table',
-    'lever', 'door', 'trap', 'fountain', 'brazier'
-] as const;
-
-export const MONSTER_TYPES = [
-    'skeleton', 'zombie', 'ghost', 'spider', 'rat_swarm',
-    'goblin', 'orc', 'troll', 'stone_guardian', 'elemental',
-    'slime', 'bat_swarm', 'cultist', 'demon', 'dragon'
-] as const;
-
-export const INTERACTION_ACTIONS = [
-    'examine', 'open', 'close', 'take', 'attack',
-    'push', 'pull', 'read', 'use', 'break'
-] as const;
-
-export const QUEST_TYPES = [
-    'retrieve_artifact', 'rescue_captive', 'defeat_boss',
-    'clear_dungeon', 'explore_depths'
-] as const;
-
+// Open-ended types (removed whitelists to maximize LLM creativity)
+export type RoomType = string;
+export type RoomTheme = string;
+export type ObjectType = string;
+export type MonsterType = string;
+export type InteractionAction = string;
+export type QuestType = string;
 export const ABILITY_CATEGORIES = ['offensive', 'defensive', 'utility'] as const;
-
 export const ABILITY_STAT_TYPES = [
     'damage', 'range', 'aoe', 'duration', 'cooldown',
     'chains', 'stun_chance', 'element', 'defense', 'reflect_chance',
     'heal', 'shield', 'speed_bonus'
 ] as const;
 
-export type RoomType = typeof ROOM_TYPES[number];
-export type RoomTheme = typeof ROOM_THEMES[number];
-export type ObjectType = typeof OBJECT_TYPES[number];
-export type MonsterType = typeof MONSTER_TYPES[number];
-export type InteractionAction = typeof INTERACTION_ACTIONS[number];
-export type QuestType = typeof QUEST_TYPES[number];
 export type AbilityCategory = typeof ABILITY_CATEGORIES[number];
