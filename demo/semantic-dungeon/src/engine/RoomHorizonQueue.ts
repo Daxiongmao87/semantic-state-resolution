@@ -345,7 +345,7 @@ IMPORTANT: Provide ONLY the high-level type (e.g., 'barrel', 'chest', 'rack', 's
                 // Schema requirements - structure is strict, content is open
                 requiredFields: ['room_type', 'theme', 'description', 'objects', 'tags'],
                 objectCount: room.components.objectSlots.length,
-                explanation: "Objects must be an array of SIMPLE strings (e.g. ['barrel', 'statue']). NO adjectives."
+                explanation: "Objects must be an array of SIMPLE human-readable properties (e.g. ['Heavy Barrel', 'Stone Statue']). Use spaces, not underscores. NO adjectives."
             }
         };
 

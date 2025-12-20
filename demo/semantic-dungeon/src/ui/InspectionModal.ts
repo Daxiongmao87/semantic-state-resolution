@@ -174,11 +174,16 @@ function renderModal(): void {
     // Title
     const titleEl = document.getElementById('modal-title');
     if (titleEl) {
+        let title = '';
         if (state.objectType) {
-            titleEl.textContent = state.objectType;
+            title = state.objectType;
         } else {
-            titleEl.textContent = state.tileType.charAt(0).toUpperCase() + state.tileType.slice(1);
+            title = state.tileType;
         }
+
+        // Format: replace underscores with spaces and capitalize words
+        title = title.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        titleEl.textContent = title;
     }
 
     // Description
