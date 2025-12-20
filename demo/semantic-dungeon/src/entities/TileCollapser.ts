@@ -125,10 +125,20 @@ export async function inspectTile(
         collapsedAt: Date.now()
     });
 
+    // If it's a door, check state
+    let finalDescription = description;
+    if (tileType === 'door') {
+        const door = room?.components.doors.find(d => d.position.x === x && d.position.y === y);
+        if (door) {
+            const state = door.state || 'closed';
+            finalDescription += ` It is ${state}.`;
+        }
+    }
+
     return {
         success: true,
         tileType,
-        description,
+        description: finalDescription,
         isObject: false,
         wasAlreadyCollapsed: false
     };
@@ -329,6 +339,11 @@ async function interactWithTileType(
         theme: 'dungeon'
     };
 
+    // Special handling for Doors
+    if (tileType === 'door' && (action.toLowerCase().includes('open') || action.toLowerCase().includes('unlock'))) {
+        return handleDoorInteraction(room, x, y, action);
+    }
+
     try {
         const request: SolverRequest = {
             requestId: `interact_tile_${x}_${y}_${Date.now()}`,
@@ -355,6 +370,97 @@ async function interactWithTileType(
     } catch (error) {
         console.error(`[TileCollapser] Interact failed for tile ${x},${y}:`, error);
         return getInteractFallback(tileType, action);
+    }
+}
+
+/**
+ * Special handler for Door interactions (Lazy Evaluation)
+ */
+async function handleDoorInteraction(
+    room: RoomEntity | null,
+    x: number,
+    y: number,
+    action: string
+): Promise<string> {
+    if (!room) return "The door is jammed.";
+
+    const door = room.components.doors.find(d => d.position.x === x && d.position.y === y);
+    if (!door) return "The door is jammed.";
+
+    // If already open
+    if (door.state === 'open') {
+        return "The door is already open.";
+    }
+
+    // Lazy Collapse: Determine if Locked or Unlocked
+    eventLog.append({
+        type: 'CollapseStarted',
+        entityId: `door_${x}_${y}`
+    });
+
+    try {
+        // We ask LLM to decide state
+        const request: SolverRequest = {
+            requestId: `start_door_${x}_${y}_${Date.now()}`,
+            taskType: 'COLLAPSE_DOOR',
+            entityId: `door_${x}_${y}`,
+            context: {
+                roomType: room.components.roomType,
+                theme: room.components.theme,
+                action,
+                instruction: `Player attempts to OPEN a door in ${room.components.roomType}.
+DECIDE: Is it Locked or Unlocked?
+PROBABILITY: 80% Unlocked, 20% Locked.
+- Unlocked: Creating flow is good. Just describe the door opening (creaking, sliding).
+- Locked: ONLY if this leads to a critical area (e.g. armory, treasury). Requires a key.
+- The decision should fit the theme (${room.components.theme}).`
+            },
+            constraints: { hard: [], soft: [] },
+            whitelist: {
+                requiredFields: ['state', 'key_name', 'message'],
+                explanation: "state must be 'locked' or 'unlocked'. key_name is required if locked. message is the description."
+            }
+        };
+
+        const response = await solver.solve(request);
+        if (!response.success || !response.proposal) throw new Error("LLM failed decision");
+
+        const state = String(response.proposal.state).toLowerCase();
+        const message = String(response.proposal.message);
+        const keyName = String(response.proposal.key_name || 'Key');
+
+        if (state === 'locked') {
+            door.state = 'locked';
+
+            // REVERSE PROPAGATION: Inject the Key elsewhere
+            getRoomHorizonQueue().injectReversePropagationConstraint(room.id, 'required_object', keyName);
+
+            eventLog.append({
+                type: 'CollapseCommitted',
+                entityId: `door_${x}_${y}`,
+                components: { state: 'locked', requiredKey: keyName },
+                tags: ['locked']
+            });
+
+            return message + ` (Requires: ${keyName})`;
+        } else {
+            door.state = 'open';
+
+            eventLog.append({
+                type: 'CollapseCommitted',
+                entityId: `door_${x}_${y}`,
+                components: { state: 'open' },
+                tags: ['open']
+            });
+
+            return message;
+        }
+
+    } catch (e) {
+        console.error("Door collapse failed", e);
+        // Fallback: It opens
+        door.state = 'open';
+        return "The door opens with a heavy creak.";
     }
 }
 

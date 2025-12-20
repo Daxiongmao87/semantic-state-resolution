@@ -2,7 +2,7 @@
  * Player Controller - Handles input and movement
  */
 
-import type { DungeonLayout, TileType } from '../dungeon/DungeonGenerator';
+import type { DungeonLayout } from '../dungeon/DungeonGenerator';
 import type { PlayerState } from '../renderer/DungeonRenderer';
 import { getEventLog } from '../engine/EventLog';
 
@@ -104,6 +104,10 @@ export class PlayerController {
                     e.preventDefault();
                     this.inspect();
                     return;
+                case ' ': // Spacebar for interaction too
+                    e.preventDefault();
+                    this.inspect();
+                    return;
             }
 
             if (direction) {
@@ -116,8 +120,8 @@ export class PlayerController {
     /**
      * Inspect the tile in front of the player
      */
-    inspect(): void {
-        const target = this.getInteractionTile();
+    inspect(x?: number, y?: number): void {
+        const target = (x !== undefined && y !== undefined) ? { x, y } : this.getInteractionTile();
         if (target && this.callbacks.onInspect) {
             this.callbacks.onInspect(target.x, target.y);
         }
@@ -148,8 +152,7 @@ export class PlayerController {
         }
 
         // Check tile walkability
-        const tile = this.layout.tiles[newY][newX];
-        if (!this.isWalkable(tile)) {
+        if (!this.isWalkable(newX, newY)) {
             this.callbacks.onMove(this.getPlayer());
             return false;
         }
@@ -186,8 +189,28 @@ export class PlayerController {
     /**
      * Check if a tile is walkable
      */
-    private isWalkable(tile: TileType): boolean {
-        return tile === 'floor' || tile === 'door';
+    private isWalkable(x: number, y: number): boolean {
+        const tile = this.layout.tiles[y][x];
+
+        if (tile === 'floor') return true;
+
+        if (tile === 'door') {
+            // Check if door is open
+            const room = this.getRoomAtPosition(x, y);
+            if (!room) return false;
+
+            const roomEntity = this.layout.rooms.get(room);
+            if (!roomEntity) return false;
+
+            const door = roomEntity.components.doors.find(d =>
+                d.position.x === x && d.position.y === y
+            );
+
+            // If door exists and is open, it's walkable
+            return door?.state === 'open';
+        }
+
+        return false;
     }
 
     /**

@@ -26,6 +26,7 @@ interface RoomCollapseResult {
     description: string;
     tags: string[];
     objectTypes: string[];
+    implications?: { type: string; value: string; targetType: 'neighbor' | 'distant' }[];
 }
 
 // =============================================================================
@@ -46,6 +47,7 @@ export class RoomHorizonQueue {
     private listeners: Set<() => void> = new Set();
     private questTags: string[] = [];
     private objectEntities: Map<string, ObjectEntity> = new Map();
+    private roomTypeCounts: Map<string, number> = new Map();
 
     /**
      * Initialize with dungeon layout
@@ -56,20 +58,41 @@ export class RoomHorizonQueue {
         this.queue.clear();
         this.activeCollapses = 0;
         this.objectEntities.clear();
+        this.roomTypeCounts.clear();
         resetObjectIdCounter();
 
         // Inject quest as hard constraint to all latent rooms
+        // Inject constraints
         if (questTags.length > 0 && questTags[0]) {
+            const mainQuest = questTags[0];
             const questConstraint: Constraint = {
                 key: 'quest_objective',
-                value: questTags[0],
+                value: mainQuest,
                 strength: 1.0,
                 type: 'hard',
                 sourceEventId: 'quest_start'
             };
 
+            // 1. All rooms get general quest context
             for (const room of layout.rooms.values()) {
                 room.constraints.push(questConstraint);
+            }
+
+            // 2. Goal room gets the SPECIFIC target constraint
+            if (layout.goalRoomId) {
+                const goalRoom = layout.rooms.get(layout.goalRoomId);
+                if (goalRoom) {
+                    const targetConstraint: Constraint = {
+                        key: 'required_object',
+                        value: mainQuest, // Passing full quest string, ObjectCollapser will extract/use it
+                        strength: 1.0,
+                        type: 'hard',
+                        sourceEventId: 'quest_target_injection'
+                    };
+                    goalRoom.constraints.push(targetConstraint);
+
+                    console.log(`[RoomHorizonQueue] Injected QUEST TARGET constraint into Goal Room: ${layout.goalRoomId}`);
+                }
             }
         }
     }
@@ -211,6 +234,10 @@ export class RoomHorizonQueue {
         try {
             const result = await this.generateRoomSemantics(room);
 
+            // Update Global History
+            const count = this.roomTypeCounts.get(result.roomType) || 0;
+            this.roomTypeCounts.set(result.roomType, count + 1);
+
             // Apply result to room
             room.components.roomType = result.roomType;
             room.components.theme = result.theme;
@@ -245,6 +272,9 @@ export class RoomHorizonQueue {
 
             // Propagate constraints to neighbors
             this.propagateConstraints(room, result);
+
+            // Reverse Propagation (Implications)
+            this.handleImplications(room, result);
 
             console.log(`[HorizonQueue] Room ${roomId} collapsed:`, result.roomType, result.theme);
 
@@ -316,6 +346,15 @@ export class RoomHorizonQueue {
             ? `\n\nCRITICAL CONTEXT: THE PLAYER'S QUEST IS: "${this.questTags[0]}"\nEverything in this room MUST reflect or relate to this quest. Avoid all generic dungeon cliches.`
             : '';
 
+        // Build History Context
+        const historyContext = Array.from(this.roomTypeCounts.entries())
+            .map(([type, count]) => `${type}: ${count}`)
+            .join(', ');
+
+        const historyInstruction = historyContext
+            ? `\n\nGLOBAL HISTORY (Existing Rooms): [${historyContext}]\nANTI-REPETITION RULE: You MUST avoid generating room types that have already been generated frequently, unless thematically essential (e.g. 'barracks' might appear twice). If 'torture_chamber' count > 0, DO NOT generate another.`
+            : '';
+
         const request: SolverRequest = {
             requestId: `collapse_room_${room.id}_${Date.now()}`,
             taskType: 'COLLAPSE_ROOM',
@@ -330,11 +369,17 @@ export class RoomHorizonQueue {
                 instruction: room.components.isEntrance
                     ? `This is the dungeon entrance. Create a unique threshold room that serves as a transition into this specific quest-driven dungeon.${questContext}`
                     : `Create a unique dungeon room. 
+${historyInstruction}
 
 CRITICAL VARIETY RULE: Check the neighboring rooms. You must generate a *different* type of room. If neighbors are 'throne_room', you must NOT create a 'throne_room'. Instead, create a supporting room (e.g., 'scullery', 'guard_post', 'secret_passage', 'torture_chamber').
 
+REVERSE PROPAGATION (Implications):
+If this room contains a logical dependency (e.g., a Locked Door, a Missing Statue Head, a Cryptic Map), you MUST generate an 'implication'.
+- Example: "Locked Door" -> implies "Key" exists in a DISTANT room.
+- Example: "Altar missing an Idol" -> implies "Golden Idol" exists in a DISTANT room.
+
 Generate ${room.components.objectSlots.length} distinct objects.
-IMPORTANT: Provide ONLY the high-level type (e.g., 'barrel', 'chest', 'rack', 'statue'). Do NOT add adjectives or details yet. Details will be generated later when the player inspects them.${questContext}`
+Generate visible_object_names as a list of Title Case strings (max 3 words). NO descriptions.`
             },
             constraints: {
                 hard: room.constraints,
@@ -343,9 +388,9 @@ IMPORTANT: Provide ONLY the high-level type (e.g., 'barrel', 'chest', 'rack', 's
             // Schema requirements only - no content examples that could override quest context
             whitelist: {
                 // Schema requirements - structure is strict, content is open
-                requiredFields: ['room_type', 'theme', 'description', 'objects', 'tags'],
+                requiredFields: ['room_type', 'theme', 'description', 'visible_object_names', 'tags', 'implications'],
                 objectCount: room.components.objectSlots.length,
-                explanation: "Objects must be an array of SIMPLE human-readable properties (e.g. ['Heavy Barrel', 'Stone Statue']). Use spaces, not underscores. NO adjectives."
+                explanation: "visible_object_names must be an array of Title Case strings (max 3 words). NO descriptions. 'implications' is a hidden array for internal logic."
             }
         };
 
@@ -362,7 +407,8 @@ IMPORTANT: Provide ONLY the high-level type (e.g., 'barrel', 'chest', 'rack', 's
             theme: String(proposal.theme || 'ancient'),
             description: String(proposal.description || 'A mysterious room.'),
             tags: Array.isArray(proposal.tags) ? proposal.tags.map(String) : [],
-            objectTypes: this.extractObjectTypes(proposal)
+            objectTypes: this.extractObjectTypes(proposal),
+            implications: Array.isArray(proposal.implications) ? proposal.implications as any[] : []
         };
     }
 
@@ -370,15 +416,16 @@ IMPORTANT: Provide ONLY the high-level type (e.g., 'barrel', 'chest', 'rack', 's
      * Extract object types from proposal with proper type handling
      */
     private extractObjectTypes(proposal: Record<string, unknown>): string[] {
-        const objects = proposal.objects || proposal.objectTypes;
+        // Look for the semantically named field first
+        const objects = proposal.visible_object_names || proposal.objects || proposal.objectTypes;
         if (!Array.isArray(objects)) return [];
 
         return objects.map((o: unknown) => {
-            if (typeof o === 'string') return o;
+            if (typeof o === 'string') return o; // Trust the LLM to follow "visible_object_names" instruction
             if (typeof o === 'object' && o !== null && 'type' in o) {
                 return String((o as { type: unknown }).type);
             }
-            return 'chest'; // Fallback only for totally malformed data
+            return 'Chest'; // Fallback
         });
     }
 
@@ -551,6 +598,121 @@ IMPORTANT: Provide ONLY the high-level type (e.g., 'barrel', 'chest', 'rack', 's
                 console.error('[HorizonQueue] Listener error:', e);
             }
         }
+    }
+
+    /**
+     * Public API to inject Reverse Propagation Constraints
+     * Used by TileCollapser for Lazy Door keys, etc.
+     */
+    public injectReversePropagationConstraint(sourceRoomId: string, type: string, value: string): void {
+        if (!this.layout) return;
+
+        // Find a latent room far away (Depth > 2)
+        const candidates = this.findDistantLatentRooms(sourceRoomId, 3);
+
+        if (candidates.length > 0) {
+            // Pick random candidate
+            const targetId = candidates[Math.floor(Math.random() * candidates.length)];
+            const targetRoom = this.layout.rooms.get(targetId);
+
+            if (targetRoom) {
+                const constraint: Constraint = {
+                    key: type, // Use passed type (e.g. 'required_object')
+                    value: value,
+                    strength: 1.0,
+                    type: 'hard',
+                    sourceEventId: `reverse_prop_${sourceRoomId}_${Date.now()}`
+                };
+
+                targetRoom.constraints.push(constraint);
+
+                this.eventLog.append({
+                    type: 'ConstraintInjected',
+                    targetEntityId: targetId,
+                    constraint
+                });
+
+                console.log(`[Reverse Propagation] Injected '${value}' into room ${targetId} (Source: ${sourceRoomId})`);
+            }
+        } else {
+            console.warn(`[Reverse Propagation] Failed to find target for '${value}' from ${sourceRoomId}`);
+        }
+    }
+
+    /**
+     * Handle Reverse Propagation (Implications)
+     * See README.md Section 7.2
+     */
+    private handleImplications(room: RoomEntity, result: RoomCollapseResult): void {
+        if (!this.layout || !result.implications || result.implications.length === 0) return;
+
+        for (const impl of result.implications) {
+            if (impl.targetType === 'distant') {
+                // innovative: Find a latent room far away (Depth > 2)
+                // We use a simple strategy: Find all latent rooms, filter by distance from current room
+                const candidates = this.findDistantLatentRooms(room.id, 3);
+
+                if (candidates.length > 0) {
+                    // Pick random candidate
+                    const targetId = candidates[Math.floor(Math.random() * candidates.length)];
+                    const targetRoom = this.layout.rooms.get(targetId);
+
+                    if (targetRoom) {
+                        const constraint: Constraint = {
+                            key: impl.type, // e.g., 'required_object'
+                            value: impl.value, // e.g., 'Rusty Key'
+                            strength: 1.0,
+                            type: 'hard',
+                            sourceEventId: `implication_${room.id}`
+                        };
+
+                        targetRoom.constraints.push(constraint);
+
+                        this.eventLog.append({
+                            type: 'ConstraintInjected',
+                            targetEntityId: targetId,
+                            constraint
+                        });
+
+                        console.log(`[Reverse Propagation] Injected '${impl.value}' into room ${targetId} (Source: ${room.id} - ${result.roomType})`);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Helper to find distant latent rooms
+     */
+    private findDistantLatentRooms(startRoomId: string, minDistance: number): string[] {
+        if (!this.layout) return [];
+
+        const candidates: string[] = [];
+        const queue: { id: string, dist: number }[] = [{ id: startRoomId, dist: 0 }];
+        const visited = new Set<string>([startRoomId]);
+
+        while (queue.length > 0) {
+            const { id, dist } = queue.shift()!;
+
+            if (dist >= minDistance) {
+                const room = this.layout.rooms.get(id);
+                if (room && room.state === 'latent') {
+                    candidates.push(id);
+                }
+            }
+
+            const room = this.layout.rooms.get(id);
+            if (room) {
+                for (const neighborId of room.components.neighbors) {
+                    if (neighborId !== 'EGRESS' && !visited.has(neighborId)) {
+                        visited.add(neighborId);
+                        queue.push({ id: neighborId, dist: dist + 1 });
+                    }
+                }
+            }
+        }
+
+        return candidates;
     }
 }
 

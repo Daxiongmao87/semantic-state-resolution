@@ -17,6 +17,7 @@ export interface DoorInfo {
     position: { x: number; y: number };
     direction: 'north' | 'south' | 'east' | 'west';
     connectedRoomId: string;
+    state?: 'open' | 'closed' | 'locked';
 }
 
 export interface ObjectSlot {
@@ -59,6 +60,7 @@ export interface DungeonLayout {
     rooms: Map<string, RoomEntity>;
     corridors: Corridor[];
     entranceRoomId: string;
+    goalRoomId: string; // Furthest room from entrance
     tiles: TileType[][];
 }
 
@@ -174,14 +176,49 @@ export class DungeonGenerator {
             });
         }
 
+        // Step 6: Identify Goal Room (Furthest from entrance)
+        const goalRoomId = this.findFurthestRoom(rooms, entranceRoomId);
+
         return {
             width: this.config.width,
             height: this.config.height,
             rooms,
             corridors,
             entranceRoomId,
+            goalRoomId,
             tiles
         };
+    }
+
+    /**
+     * Find the room furthest from the start room using BFS
+     */
+    private findFurthestRoom(rooms: Map<string, RoomEntity>, startRoomId: string): string {
+        const queue: { id: string; distance: number }[] = [{ id: startRoomId, distance: 0 }];
+        const visited = new Set<string>([startRoomId]);
+        let furthestRoomId = startRoomId;
+        let maxDistance = 0;
+
+        while (queue.length > 0) {
+            const current = queue.shift()!;
+
+            if (current.distance > maxDistance) {
+                maxDistance = current.distance;
+                furthestRoomId = current.id;
+            }
+
+            const room = rooms.get(current.id);
+            if (room) {
+                for (const neighborId of room.components.neighbors) {
+                    if (!visited.has(neighborId)) {
+                        visited.add(neighborId);
+                        queue.push({ id: neighborId, distance: current.distance + 1 });
+                    }
+                }
+            }
+        }
+
+        return furthestRoomId;
     }
 
     /**
@@ -348,7 +385,8 @@ export class DungeonGenerator {
                 id: `door_${roomA.id}_${roomB.id}`,
                 position: doorA.position,
                 direction: doorA.direction,
-                connectedRoomId: roomB.id
+                connectedRoomId: roomB.id,
+                state: 'closed'
             });
         }
 
@@ -357,7 +395,8 @@ export class DungeonGenerator {
                 id: `door_${roomB.id}_${roomA.id}`,
                 position: doorB.position,
                 direction: this.oppositeDirection(doorB.direction),
-                connectedRoomId: roomA.id
+                connectedRoomId: roomA.id,
+                state: 'closed'
             });
         }
     }

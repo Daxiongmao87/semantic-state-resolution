@@ -150,6 +150,7 @@ export interface DoorInfo {
     position: { x: number; y: number };
     direction: 'north' | 'south' | 'east' | 'west';
     connectedRoomId: string;
+    state?: 'open' | 'closed' | 'locked';
 }
 
 // Object Components

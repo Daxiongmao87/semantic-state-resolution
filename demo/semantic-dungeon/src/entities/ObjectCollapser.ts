@@ -40,6 +40,24 @@ export async function collapseObjectType(
         const questObj = obj.constraints.find(c => c.key === 'quest_objective');
         const questContext = questObj ? `\n\nCRITICAL QUEST: "${questObj.value}"\nThis object MUST reflect this specific quest theme.` : '';
 
+        const requiredObj = obj.constraints.find(c => c.key === 'required_object');
+
+        let instruction = `This object exists in a ${roomType} (${roomTheme}). What IS this object? 
+
+RULES:
+- Be creative and contextual.
+- Avoid generic dungeon clichés.${questContext}
+- Just identify the type of object (e.g., 'cracked magma-shard', 'water-logged chest', 'floating ember').
+- Respond with 2-3 tags for initial properties.`;
+
+        if (requiredObj) {
+            instruction = `CRITICAL OVERRIDE: This object MUST be the key quest item described as: "${requiredObj.value}".
+You must generate this specific item.
+Name it appropriately (e.g. 'Golden Idol', 'Ancient Scroll').
+Tags should reflect its legendary or key status.`;
+            console.log(`[ObjectCollapser] Forcing QUEST TARGET generation: ${requiredObj.value}`);
+        }
+
         const request: SolverRequest = {
             requestId: `collapse_object_type_${obj.id}_${Date.now()}`,
             taskType: 'COLLAPSE_OBJECT_TYPE',
@@ -49,13 +67,7 @@ export async function collapseObjectType(
                 roomTheme,
                 roomDescription,
                 position: obj.components.localPosition,
-                instruction: `This object exists in a ${roomType} (${roomTheme}). What IS this object? 
-
-RULES:
-- Be creative and contextual.
-- Avoid generic dungeon clichés.${questContext}
-- Just identify the type of object (e.g., 'cracked magma-shard', 'water-logged chest', 'floating ember').
-- Respond with 2-3 tags for initial properties.`
+                instruction
             },
             constraints: {
                 hard: obj.constraints,
