@@ -293,6 +293,10 @@ export class RoomHorizonQueue {
             entityId: 'entityId' in e ? e.entityId : undefined
         }));
 
+        const questContext = this.questTags.length > 0 && this.questTags[0]
+            ? `\n\nPLAYER'S QUEST: "${this.questTags[0]}"\nThis dungeon should feel relevant to the quest. Room themes, objects, and atmosphere should subtly support or relate to the quest goal.`
+            : '';
+
         const request: SolverRequest = {
             requestId: `collapse_room_${room.id}_${Date.now()}`,
             taskType: 'COLLAPSE_ROOM',
@@ -305,23 +309,18 @@ export class RoomHorizonQueue {
                 questTags: this.questTags,
                 recentEvents,
                 instruction: room.components.isEntrance
-                    ? `This is the dungeon entrance, adjacent to the outside world. Create a unique threshold room that makes sense as a transition from the surface. Be creative with the room type and theme.`
-                    : `Create a unique dungeon room. Consider the neighboring rooms' themes for coherence but don't just copy them. Be creative - this could be anything from a flooded crypt to an abandoned alchemist's lab to a nest of something horrible. Generate ${room.components.objectSlots.length} distinct objects that fit the room's character.`
+                    ? `This is the dungeon entrance, adjacent to the outside world. Create a unique threshold room that makes sense as a transition from the surface.${questContext}`
+                    : `Create a unique dungeon room. Consider the neighboring rooms' themes for coherence. Be creative - this could be anything from a flooded crypt to an abandoned alchemist's lab. Generate ${room.components.objectSlots.length} distinct objects that fit the room's character.${questContext}`
             },
             constraints: {
                 hard: room.constraints,
                 soft: []
             },
-            // Schema requirements, NOT content restrictions
+            // Schema requirements only - no content examples that could override quest context
             whitelist: {
                 requiredFields: ['room_type', 'theme', 'description', 'objects', 'tags'],
-                objectCount: room.components.objectSlots.length,
-                // Examples for inspiration, not restrictions
-                examples: {
-                    roomTypes: ['flooded crypt', 'abandoned laboratory', 'fungal garden', 'collapsed mine', 'ritual chamber', 'monster nest', 'forgotten armory'],
-                    themes: ['decay', 'corruption', 'nature reclaiming', 'ancient magic', 'recent violence', 'eerie silence'],
-                    objects: ['rusted cage', 'bubbling cauldron', 'crystalline formation', 'gnawed bones', 'torn tapestry', 'strange machinery']
-                }
+                objectCount: room.components.objectSlots.length
+                // No examples - let quest context drive creativity
             }
         };
 
@@ -406,17 +405,19 @@ export class RoomHorizonQueue {
             );
 
             // Set initial type from room collapse result
-            if (i < result.objectTypes.length) {
+            if (i < result.objectTypes.length && result.objectTypes[i]) {
                 objEntity.components.objectType = result.objectTypes[i];
+                // Type already assigned from room collapse - don't re-collapse
+                objEntity.state = 'latent';
+            } else {
+                // No type from room - generate via LLM
+                await collapseObjectType(
+                    objEntity,
+                    result.roomType,
+                    result.theme,
+                    result.description
+                );
             }
-
-            // Collapse object type with room context (creates richer type info)
-            await collapseObjectType(
-                objEntity,
-                result.roomType,
-                result.theme,
-                result.description
-            );
 
             // Store the entity
             this.objectEntities.set(objEntity.id, objEntity);

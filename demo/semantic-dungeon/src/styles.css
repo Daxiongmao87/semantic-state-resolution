@@ -648,3 +648,269 @@ input[type="text"]:focus {
 body:has(#dungeon-container) #app {
   max-width: 1100px;
 }
+
+/* Inspection Panel */
+.inspecting {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  color: var(--accent-warning);
+}
+
+.inspection-content {
+  font-size: 0.875rem;
+}
+
+.inspection-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.tile-type {
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  text-transform: capitalize;
+  font-weight: 500;
+}
+
+.tile-type.floor {
+  background: rgba(100, 100, 100, 0.3);
+  color: var(--text-secondary);
+}
+
+.tile-type.wall {
+  background: rgba(80, 60, 40, 0.4);
+  color: #a89070;
+}
+
+.tile-type.door {
+  background: rgba(139, 92, 246, 0.3);
+  color: var(--accent-primary);
+}
+
+.tile-type.void {
+  background: rgba(0, 0, 0, 0.5);
+  color: var(--text-muted);
+}
+
+.tile-type.object {
+  background: rgba(245, 158, 11, 0.3);
+  color: var(--accent-warning);
+}
+
+.cached {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.inspection-desc {
+  color: var(--text-primary);
+  line-height: 1.5;
+}
+
+.inspection-error {
+  color: var(--accent-danger);
+}
+
+/* =============================================================================
+   Inspection Modal
+   ============================================================================= */
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.modal-overlay.open {
+  display: flex;
+}
+
+.modal-content {
+  background: var(--card-bg);
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-lg);
+  width: 90%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-dim);
+  background: var(--surface-elevated);
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: var(--accent-warning);
+  text-transform: capitalize;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.modal-body {
+  padding: 1.25rem;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.modal-description {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+.modal-description p {
+  margin: 0;
+}
+
+.modal-history {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-dim);
+}
+
+.history-header {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.history-item {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding: 0.25rem 0;
+  font-style: italic;
+}
+
+.modal-footer {
+  padding: 1rem 1.25rem;
+  border-top: 1px solid var(--border-dim);
+  background: var(--surface-elevated);
+}
+
+#modal-action-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-md);
+  background: var(--surface-void);
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+#modal-action-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+#modal-action-input::placeholder {
+  color: var(--text-muted);
+}
+
+#modal-action-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.modal-actions .btn {
+  min-width: 100px;
+}
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--accent-warning);
+  padding: 1rem 0;
+}
+
+/* Quest Modal */
+.quest-modal {
+  max-width: 450px;
+}
+
+.quest-prompt-text {
+  font-size: 1rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+#quest-input {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--border-dim);
+  border-radius: var(--radius-md);
+  background: var(--surface-void);
+  color: var(--text-primary);
+  resize: vertical;
+  font-family: inherit;
+}
+
+#quest-input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+}
+
+#quest-input::placeholder {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+#quest-begin-btn {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 1rem;
+}

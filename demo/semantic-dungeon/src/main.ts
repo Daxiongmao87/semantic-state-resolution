@@ -10,6 +10,9 @@ import { DungeonRenderer, type PlayerState } from './renderer/DungeonRenderer';
 import { PlayerController } from './player/PlayerController';
 import { getRoomHorizonQueue } from './engine/RoomHorizonQueue';
 import { getEventLog } from './engine/EventLog';
+import { clearTileCache } from './entities/TileCollapser';
+import { openInspectionModal, isModalOpen } from './ui/InspectionModal';
+import { promptForQuest } from './ui/QuestModal';
 import './styles.css';
 
 type DemoMode = 'class' | 'dungeon';
@@ -134,6 +137,12 @@ function initDungeonMode(): void {
                         </div>
                     </div>
                     <div class="panel">
+                        <h3>Inspection</h3>
+                        <div id="inspection-result">
+                            <p class="empty">Press E to inspect what's in front of you.</p>
+                        </div>
+                    </div>
+                    <div class="panel">
                         <h3>Horizon Queue</h3>
                         <div id="horizon-status"></div>
                     </div>
@@ -149,20 +158,29 @@ function initDungeonMode(): void {
         `;
         document.getElementById('app')!.appendChild(dungeonContainer);
 
-        // Generate initial dungeon
-        generateDungeon();
+        // Prompt for quest then generate dungeon
+        promptForQuest().then(quest => {
+            generateDungeon(quest);
+        });
 
         // Bind new dungeon button
-        document.getElementById('new-dungeon-btn')?.addEventListener('click', () => {
-            generateDungeon();
+        document.getElementById('new-dungeon-btn')?.addEventListener('click', async () => {
+            const quest = await promptForQuest();
+            generateDungeon(quest);
         });
     } else {
         dungeonContainer.style.display = 'block';
     }
 }
 
-function generateDungeon(): void {
-    console.log('[Dungeon] Generating new dungeon...');
+let currentQuest: string = '';
+
+function generateDungeon(quest: string): void {
+    console.log('[Dungeon] Generating new dungeon with quest:', quest);
+    currentQuest = quest;
+
+    // Clear tile cache from previous dungeon
+    clearTileCache();
 
     // Generate layout
     const generator = new DungeonGenerator({
@@ -178,9 +196,9 @@ function generateDungeon(): void {
     dungeonRenderer = new DungeonRenderer('dungeon-canvas');
     dungeonRenderer.setLayout(dungeonLayout);
 
-    // Initialize horizon queue
+    // Initialize horizon queue with quest as constraint
     const horizonQueue = getRoomHorizonQueue();
-    horizonQueue.initialize(dungeonLayout, ['quest_tag_placeholder']);
+    horizonQueue.initialize(dungeonLayout, [currentQuest]);
 
     // Subscribe to queue updates
     horizonQueue.subscribe(() => {
@@ -203,6 +221,9 @@ function generateDungeon(): void {
         },
         onRoomExit: (roomId: string) => {
             console.log(`[Player] Left room: ${roomId}`);
+        },
+        onInspect: (x: number, y: number) => {
+            handleInspection(x, y);
         }
     });
 
@@ -296,6 +317,23 @@ function updateDungeonEvents(): void {
             <span class="id">${'entityId' in e ? e.entityId : ''}</span>
         </div>
     `).join('');
+}
+
+async function handleInspection(x: number, y: number): Promise<void> {
+    if (!dungeonLayout) return;
+
+    // Don't open if modal already open
+    if (isModalOpen()) return;
+
+    // Disable player input while modal is open
+    playerController?.setInputEnabled(false);
+
+    // Open the inspection modal
+    await openInspectionModal(dungeonLayout, x, y, () => {
+        // Re-enable input when modal closes
+        playerController?.setInputEnabled(true);
+        updateDungeonEvents();
+    });
 }
 
 init().catch(error => {

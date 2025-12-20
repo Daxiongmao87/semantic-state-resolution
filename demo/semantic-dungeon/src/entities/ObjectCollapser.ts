@@ -99,10 +99,12 @@ export async function collapseObjectType(
 
 /**
  * Collapse visual description (called when player examines)
+ * Will regenerate if visualDesc was invalidated by an interaction
  */
 export async function collapseObjectVisual(obj: ObjectEntity): Promise<string> {
-    if (getObjectCollapseLevel(obj) !== 'type') {
-        return obj.components.visualDesc || 'You see nothing special.';
+    // Return cached if we have a visual description already
+    if (obj.components.visualDesc) {
+        return obj.components.visualDesc;
     }
 
     obj.state = 'collapsing';
@@ -113,22 +115,49 @@ export async function collapseObjectVisual(obj: ObjectEntity): Promise<string> {
     });
 
     try {
+        const objectType = obj.components.objectType || 'unknown object';
+        const currentTags = obj.components.tags || [];
+        const currentState = obj.components.interactionState || 'unknown';
+        const lastInteraction = obj.components.interactionResult || null;
+
         const request: SolverRequest = {
             requestId: `collapse_object_visual_${obj.id}_${Date.now()}`,
             taskType: 'COLLAPSE_OBJECT_VISUAL',
             entityId: obj.id,
             context: {
-                objectType: obj.components.objectType,
-                tags: obj.components.tags,
-                state: obj.components.interactionState,
-                instruction: `Describe this ${obj.components.objectType} in vivid detail. What does it look like? What material is it made of? What condition is it in? Are there any notable features, markings, damage, or peculiarities? Write 2-3 sentences of evocative description.`
+                objectType,
+                tags: currentTags,
+                state: currentState,
+                lastInteraction,
+                instruction: `Describe what the player sees when looking at a "${objectType}".
+
+RULES:
+- Use SECOND PERSON: "You see...", "Before you lies...", "You notice..."
+- Description must be SELF-CONTAINED.
+- Current state: ${currentState}
+- Current properties: ${currentTags.length > 0 ? currentTags.join(', ') : 'none'}
+${lastInteraction ? `- IMPORTANT - This object was modified. What happened: "${lastInteraction}". Your description MUST reflect this specific change.` : ''}
+
+Write 2-3 sentences describing what the player sees RIGHT NOW.`
             },
             constraints: {
-                hard: obj.constraints,
+                hard: [
+                    ...obj.constraints,
+                    { key: 'object_type', value: objectType, strength: 1.0, type: 'hard', sourceEventId: 'room_collapse' },
+                    // Current state tags as constraints
+                    ...currentTags.map(tag => ({
+                        key: `current_state_${tag}`,
+                        value: true,
+                        strength: 1.0,
+                        type: 'hard' as const,
+                        sourceEventId: 'previous_interaction'
+                    }))
+                ],
                 soft: []
             },
             whitelist: {
-                requiredFields: ['visual_description', 'material', 'condition']
+                requiredFields: ['visual_description', 'material', 'condition'],
+                objectType: objectType
             }
         };
 
@@ -196,24 +225,53 @@ export async function collapseObjectContents(
     });
 
     try {
+        const objectType = obj.components.objectType || 'object';
+        const existingTags = obj.components.tags || [];
+        const existingState = obj.components.interactionState || 'unknown';
+
         const request: SolverRequest = {
             requestId: `collapse_object_contents_${obj.id}_${Date.now()}`,
             taskType: 'COLLAPSE_OBJECT_CONTENTS',
             entityId: obj.id,
             context: {
-                objectType: obj.components.objectType,
+                objectType,
                 visualDesc: obj.components.visualDesc,
-                tags: obj.components.tags,
-                currentState: obj.components.interactionState,
+                existingTags,
+                existingState,
                 action,
-                instruction: `The player attempts to "${action}" this ${obj.components.objectType}. What happens? If it's a container, what's inside? If it's interactive, what effect does the action have? If the action doesn't make sense for this object, describe why it fails. Be creative and consequential.`
+                instruction: `The player attempts: "${action}" on a ${objectType}.
+
+RULES:
+- Use SECOND PERSON: "You...", "Your hands...", "You see..."
+- Current object state: ${existingState}
+- Current properties: ${existingTags.join(', ') || 'none'}
+
+Generate:
+1. result: What happens? Describe in second person. (2-3 sentences, e.g., "You strike the crystal and it shatters, sending shards flying. A faint hum fills the air as glowing dust settles around you.")
+2. new_state: Single word/phrase for new state (e.g., "shattered", "opened", "activated")
+3. new_tags: Array of tags for the object's new properties (e.g., ["shattered", "glowing_dust", "sharp_shards"])
+4. contents: If something was revealed/found, list items (array of strings)
+
+Be creative. Actions have consequences.`
             },
             constraints: {
-                hard: obj.constraints,
+                hard: [
+                    ...obj.constraints,
+                    { key: 'object_type', value: objectType, strength: 1.0, type: 'hard', sourceEventId: 'constraint' },
+                    // Existing tags become constraints
+                    ...existingTags.map(tag => ({
+                        key: `previous_state_${tag}`,
+                        value: true,
+                        strength: 0.8,
+                        type: 'soft' as const,
+                        sourceEventId: 'previous_interaction'
+                    }))
+                ],
                 soft: []
             },
             whitelist: {
-                requiredFields: ['result', 'new_state', 'contents']
+                requiredFields: ['result', 'new_state', 'new_tags', 'contents'],
+                objectType
             }
         };
 
@@ -226,14 +284,23 @@ export async function collapseObjectContents(
         const proposal = response.proposal;
 
         obj.components.interactionResult = String(proposal.result || 'Nothing happens.');
-        obj.components.interactionState = String(proposal.new_state || proposal.newState || 'open') as ObjectEntity['components']['interactionState'];
+        obj.components.interactionState = String(proposal.new_state || proposal.newState || 'changed') as ObjectEntity['components']['interactionState'];
         obj.components.contents = Array.isArray(proposal.contents)
             ? proposal.contents.map(String)
             : [];
 
-        // Now fully collapsed
-        obj.state = 'collapsed';
-        obj.collapsedAt = Date.now();
+        // Merge new tags with existing (these become constraints for future interactions)
+        const newTags = Array.isArray(proposal.new_tags)
+            ? proposal.new_tags.map(String)
+            : [];
+        obj.components.tags = [...new Set([...obj.components.tags, ...newTags])];
+
+        // Invalidate visual description - next inspection will regenerate based on new state
+        // This ensures "inspect after tip" shows "tilted chest" not "upright chest"
+        obj.components.visualDesc = undefined;
+
+        // Don't mark as fully collapsed - object can be interacted with again
+        obj.state = 'latent';
 
         eventLog.append({
             type: 'CollapseCommitted',
@@ -241,7 +308,8 @@ export async function collapseObjectContents(
             components: {
                 interactionResult: obj.components.interactionResult,
                 interactionState: obj.components.interactionState,
-                contents: obj.components.contents
+                contents: obj.components.contents,
+                newTags
             },
             tags: obj.components.tags
         });

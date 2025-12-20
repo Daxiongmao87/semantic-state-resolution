@@ -12,6 +12,7 @@ export interface PlayerControllerCallbacks {
     onMove: (player: PlayerState) => void;
     onRoomEnter: (roomId: string, previousRoomId: string | null) => void;
     onRoomExit: (roomId: string) => void;
+    onInspect?: (x: number, y: number) => void;
 }
 
 export class PlayerController {
@@ -98,6 +99,11 @@ export class PlayerController {
                 case 'D':
                     direction = 'east';
                     break;
+                case 'e':
+                case 'E':
+                    e.preventDefault();
+                    this.inspect();
+                    return;
             }
 
             if (direction) {
@@ -105,6 +111,16 @@ export class PlayerController {
                 this.move(direction);
             }
         });
+    }
+
+    /**
+     * Inspect the tile in front of the player
+     */
+    inspect(): void {
+        const target = this.getInteractionTile();
+        if (target && this.callbacks.onInspect) {
+            this.callbacks.onInspect(target.x, target.y);
+        }
     }
 
     /**
