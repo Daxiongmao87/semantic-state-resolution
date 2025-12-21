@@ -4,6 +4,7 @@
 
 import type { DungeonLayout } from '../dungeon/DungeonGenerator';
 import { inspectTile, interactWithTile } from '../entities/TileCollapser';
+import { getOpenRouterSolver } from '../solver/OpenRouterSolver';
 
 // =============================================================================
 // Modal State
@@ -19,6 +20,8 @@ interface ModalState {
     tileType: string;
     isLoading: boolean;
     history: string[];  // Previous interaction results for context
+    suggestions: string[];  // AI-suggested actions
+    suggestionsLoading: boolean;
 }
 
 const state: ModalState = {
@@ -30,7 +33,9 @@ const state: ModalState = {
     objectType: null,
     tileType: 'floor',
     isLoading: false,
-    history: []
+    history: [],
+    suggestions: [],
+    suggestionsLoading: false
 };
 
 let modalElement: HTMLElement | null = null;
@@ -57,6 +62,8 @@ export async function openInspectionModal(
     state.isLoading = true;
     state.isOpen = true;
     state.history = [];
+    state.suggestions = [];
+    state.suggestionsLoading = false;
     onCloseCallback = onClose || null;
     onInventoryAddCallback = onInventoryAdd || null;
 
@@ -72,6 +79,9 @@ export async function openInspectionModal(
         state.tileType = result.tileType;
         state.isLoading = false;
         renderModal();
+
+        // Fetch AI suggestions for actions
+        fetchSuggestions();
     } catch (error) {
         state.currentDescription = 'Failed to inspect.';
         state.isLoading = false;
@@ -125,6 +135,7 @@ function ensureModalExists(): void {
                        placeholder="What do you do? (e.g., 'open it', 'tip it over', 'examine closer')"
                        autocomplete="off"
                 />
+                <div id="modal-suggestions" class="modal-suggestions"></div>
                 <div class="modal-actions">
                     <button id="modal-interact-btn" class="btn primary">Interact</button>
                     <button id="modal-close-action-btn" class="btn secondary">Close</button>
@@ -269,6 +280,9 @@ async function handleInteract(): Promise<void> {
         // Clear input
         if (inputEl) inputEl.value = '';
 
+        // Fetch new suggestions based on updated state
+        fetchSuggestions();
+
         renderModal();
 
     } catch (error) {
@@ -277,4 +291,87 @@ async function handleInteract(): Promise<void> {
         state.isLoading = false;
         renderModal();
     }
+}
+
+// =============================================================================
+// AI Suggestions
+// =============================================================================
+
+/**
+ * Fetch AI-generated action suggestions
+ */
+async function fetchSuggestions(): Promise<void> {
+    if (!state.layout) return;
+
+    state.suggestionsLoading = true;
+    renderSuggestions();
+
+    try {
+        const solver = getOpenRouterSolver();
+        const response = await solver.solve({
+            requestId: `suggestions_${state.x}_${state.y}_${Date.now()}`,
+            taskType: 'SUGGEST_ACTIONS',
+            entityId: `tile_${state.x}_${state.y}`,
+            context: {
+                description: state.currentDescription,
+                objectType: state.objectType,
+                tileType: state.tileType,
+                history: state.history.slice(-3),
+                instruction: `Given this scene description, suggest exactly 3 short action phrases (2-4 words each) that a player could take. Return ONLY a JSON object with a "suggestions" array of 3 strings. Example: {"suggestions": ["examine closer", "tip it over", "search underneath"]}`
+            },
+            constraints: { hard: [], soft: [] },
+            whitelist: {
+                requiredFields: ['suggestions'],
+                maxSuggestions: 3
+            }
+        });
+
+        if (response.success && response.proposal?.suggestions) {
+            const suggestions = response.proposal.suggestions;
+            if (Array.isArray(suggestions)) {
+                state.suggestions = suggestions.slice(0, 3).map(s => String(s).trim());
+            }
+        } else {
+            state.suggestions = ['look closer', 'touch it', 'step back'];
+        }
+    } catch (error) {
+        console.warn('[InspectionModal] Failed to fetch suggestions:', error);
+        state.suggestions = ['examine', 'interact', 'leave'];
+    }
+
+    state.suggestionsLoading = false;
+    renderSuggestions();
+}
+
+/**
+ * Render suggestions buttons
+ */
+function renderSuggestions(): void {
+    const container = document.getElementById('modal-suggestions');
+    if (!container) return;
+
+    if (state.suggestionsLoading) {
+        container.innerHTML = '<span class="suggestions-loading">Getting ideas...</span>';
+        return;
+    }
+
+    if (state.suggestions.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+
+    container.innerHTML = state.suggestions
+        .map((s, i) => `<button class="suggestion-btn" data-index="${i}">${s}</button>`)
+        .join('');
+
+    // Bind click events
+    container.querySelectorAll('.suggestion-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const inputEl = document.getElementById('modal-action-input') as HTMLInputElement;
+            if (inputEl) {
+                inputEl.value = (btn as HTMLElement).textContent || '';
+                inputEl.focus();
+            }
+        });
+    });
 }
