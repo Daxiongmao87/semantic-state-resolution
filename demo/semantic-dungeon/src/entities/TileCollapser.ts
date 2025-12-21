@@ -9,6 +9,7 @@ import type { DungeonLayout, RoomEntity, TileType } from '../dungeon/DungeonGene
 import type { SolverRequest } from '../types';
 import { getRoomHorizonQueue } from '../engine/RoomHorizonQueue';
 import { collapseObjectVisual, collapseObjectContents } from './ObjectCollapser';
+import { getFallbackTileDescription } from '../engine/FallbackTable';
 
 const solver = getOpenRouterSolver();
 const eventLog = getEventLog();
@@ -514,20 +515,10 @@ PHYSICS/THEME VALIDATION:
 
 /**
  * Fallback descriptions
+ * V7 Fix: Uses hash-indexed deterministic selection
  */
-function getFallbackDescription(tileType: TileType): string {
-    switch (tileType) {
-        case 'floor':
-            return 'Worn stone tiles, cold underfoot.';
-        case 'wall':
-            return 'Solid stone blocks, old but sturdy.';
-        case 'door':
-            return 'A heavy wooden door, weathered by age.';
-        case 'void':
-            return 'Impenetrable darkness stretches beyond.';
-        default:
-            return 'You see nothing remarkable.';
-    }
+function getFallbackDescription(tileType: TileType, x: number = 0, y: number = 0): string {
+    return getFallbackTileDescription(tileType, x, y);
 }
 
 function getInteractFallback(tileType: TileType, action: string): string {
