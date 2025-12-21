@@ -500,8 +500,17 @@ PHYSICS/THEME VALIDATION:
                 return message;
 
             case 'closed':
+                door.state = 'closed';
+                eventLog.append({
+                    type: 'CollapseCommitted',
+                    entityId: `door_${x}_${y}`,
+                    components: { state: 'closed' },
+                    tags: ['closed']
+                });
+                return message;
+
             default:
-                // State remains unchanged
+                // Unknown state - leave unchanged
                 return message;
         }
 
