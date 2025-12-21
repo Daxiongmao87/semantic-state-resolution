@@ -27,6 +27,7 @@ interface RoomCollapseResult {
     description: string;
     tags: string[];
     objectTypes: string[];
+    objectCount?: number; // V2 Fix: LLM-proposed semantic object count
     implications?: { type: string; value: string; targetType: 'neighbor' | 'distant' }[];
 }
 
@@ -245,7 +246,16 @@ export class RoomHorizonQueue {
             room.components.description = result.description;
             room.components.tags = result.tags;
 
-            // Assign types to object slots
+            // V2 Fix: Create object slots NOW based on LLM-proposed semantic count
+            // This is the key inversion: semantics determine objects, not RNG at init
+            const semanticObjectCount = result.objectCount ?? result.objectTypes.length;
+            room.components.objectSlots = this.createSemanticObjectSlots(
+                room.id,
+                room.components.dimensions,
+                semanticObjectCount
+            );
+
+            // Assign types to the newly created slots
             for (let i = 0; i < room.components.objectSlots.length; i++) {
                 if (i < result.objectTypes.length) {
                     room.components.objectSlots[i].objectType = result.objectTypes[i];
@@ -363,7 +373,8 @@ export class RoomHorizonQueue {
             context: {
                 isEntrance: room.components.isEntrance,
                 dimensions: room.components.dimensions,
-                objectSlotCount: room.components.objectSlots.length,
+                // V2 Fix: Don't tell LLM how many objects - ask it to propose based on semantics
+                roomArea: room.components.dimensions.width * room.components.dimensions.height,
                 neighbors,
                 questTags: this.questTags,
                 recentEvents,
@@ -379,8 +390,12 @@ If this room contains a logical dependency (e.g., a Locked Door, a Missing Statu
 - Example: "Locked Door" -> implies "Key" exists in a DISTANT room.
 - Example: "Altar missing an Idol" -> implies "Golden Idol" exists in a DISTANT room.
 
-Generate ${room.components.objectSlots.length} distinct objects.
-Generate visible_object_names as a list of Title Case strings (max 3 words). NO descriptions.`
+Determine how many objects this room should contain based on its semantic type (room_type):
+- Entrances, corridors: 0-1 objects
+- Storage rooms, armories: 3-5 objects
+- Shrines, chambers: 1-3 objects
+
+Provide 'object_count' as an integer, then provide exactly that many 'visible_object_names' as Title Case strings (max 3 words). NO descriptions.`
             },
             constraints: {
                 hard: room.constraints,
@@ -388,10 +403,10 @@ Generate visible_object_names as a list of Title Case strings (max 3 words). NO 
             },
             // Schema requirements only - no content examples that could override quest context
             whitelist: {
-                // Schema requirements - structure is strict, content is open
-                requiredFields: ['room_type', 'theme', 'description', 'visible_object_names', 'tags', 'implications'],
-                objectCount: room.components.objectSlots.length,
-                explanation: "visible_object_names must be an array of Title Case strings (max 3 words). NO descriptions. 'implications' is a hidden array for internal logic."
+                // V2 Fix: Now includes object_count in required fields
+                requiredFields: ['room_type', 'theme', 'description', 'object_count', 'visible_object_names', 'tags', 'implications'],
+                maxObjectCount: 6, // Hard limit
+                explanation: "object_count is how many objects the room should have based on its semantic type. visible_object_names must match object_count length."
             }
         };
 
@@ -403,12 +418,21 @@ Generate visible_object_names as a list of Title Case strings (max 3 words). NO 
 
         const proposal = response.proposal;
 
+        // V2 Fix: Extract semantic object count from LLM proposal
+        let objectCount = 0;
+        if (typeof proposal.object_count === 'number') {
+            objectCount = Math.min(Math.max(0, proposal.object_count), 6); // Clamp to 0-6
+        } else if (typeof proposal.objectCount === 'number') {
+            objectCount = Math.min(Math.max(0, proposal.objectCount), 6);
+        }
+
         return {
             roomType: String(proposal.room_type || proposal.roomType || 'chamber'),
             theme: String(proposal.theme || 'ancient'),
             description: String(proposal.description || 'A mysterious room.'),
             tags: Array.isArray(proposal.tags) ? proposal.tags.map(String) : [],
             objectTypes: this.extractObjectTypes(proposal),
+            objectCount: objectCount, // V2 Fix: Pass semantic count to caller
             implications: Array.isArray(proposal.implications) ? proposal.implications as any[] : []
         };
     }
@@ -523,15 +547,51 @@ Generate visible_object_names as a list of Title Case strings (max 3 words). NO 
     }
 
     /**
+     * V2 Fix: Create object slots post-collapse based on semantic count
+     * This implements the key SWFC principle: semantics determine objects
+     */
+    private createSemanticObjectSlots(
+        roomId: string,
+        dimensions: { width: number; height: number },
+        count: number
+    ): Array<{ id: string; localPosition: { x: number; y: number }; size: { width: number; height: number }; objectType?: string }> {
+        const slots: Array<{ id: string; localPosition: { x: number; y: number }; size: { width: number; height: number }; objectType?: string }> = [];
+        const usedPositions = new Set<string>();
+
+        for (let i = 0; i < count; i++) {
+            // Try to find a valid position (not too close to walls)
+            for (let attempt = 0; attempt < 10; attempt++) {
+                const localX = 1 + Math.floor(Math.random() * Math.max(1, dimensions.width - 2));
+                const localY = 1 + Math.floor(Math.random() * Math.max(1, dimensions.height - 2));
+                const posKey = `${localX},${localY}`;
+
+                if (!usedPositions.has(posKey)) {
+                    usedPositions.add(posKey);
+                    slots.push({
+                        id: `${roomId}_slot_${i}`,
+                        localPosition: { x: localX, y: localY },
+                        size: { width: 1, height: 1 }
+                    });
+                    break;
+                }
+            }
+        }
+
+        return slots;
+    }
+
+    /**
      * Fallback for when LLM fails
      * V7 Fix: Uses hash-indexed deterministic selection per §4.3.1
      */
     private getFallbackResult(room: RoomEntity): RoomCollapseResult {
         const hardConstraints = room.constraints.filter(c => c.type === 'hard');
+        // For fallback, use a default count of 2 if no pre-existing slots
+        const objectCount = room.components.objectSlots.length || 2;
         const result = getFallbackRoomResult(
             room.id,
             hardConstraints,
-            room.components.objectSlots.length,
+            objectCount,
             room.components.isEntrance
         );
 

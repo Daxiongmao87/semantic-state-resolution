@@ -140,7 +140,9 @@ export class DungeonGenerator {
                     dimensions: { width: bspRoom.width, height: bspRoom.height },
                     neighbors: [],
                     doors: [],
-                    objectSlots: this.createObjectSlots(roomId, bspRoom),
+                    // V2 Fix: Object slots are now EMPTY at init
+                    // They will be created post-collapse based on LLM-proposed semantic count
+                    objectSlots: [],
                     isEntrance: i === 0  // First room is entrance
                 },
                 createdAt: Date.now()
@@ -233,39 +235,8 @@ export class DungeonGenerator {
         }
     }
 
-    /**
-     * Create object slots within a room
-     */
-    private createObjectSlots(roomId: string, room: Rect): ObjectSlot[] {
-        const count = this.rng.randomInt(
-            this.config.objectSlotsPerRoom.min,
-            this.config.objectSlotsPerRoom.max
-        );
-
-        const slots: ObjectSlot[] = [];
-        const usedPositions = new Set<string>();
-
-        for (let i = 0; i < count; i++) {
-            // Try to find a valid position (not too close to walls)
-            for (let attempt = 0; attempt < 10; attempt++) {
-                const localX = this.rng.randomInt(1, room.width - 2);
-                const localY = this.rng.randomInt(1, room.height - 2);
-                const posKey = `${localX},${localY}`;
-
-                if (!usedPositions.has(posKey)) {
-                    usedPositions.add(posKey);
-                    slots.push({
-                        id: `${roomId}_slot_${i}`,
-                        localPosition: { x: localX, y: localY },
-                        size: { width: 1, height: 1 }
-                    });
-                    break;
-                }
-            }
-        }
-
-        return slots;
-    }
+    // V2 Fix: createObjectSlots removed - object slots are now created post-collapse
+    // in RoomHorizonQueue.createSemanticObjectSlots() based on LLM-proposed semantic count
 
     /**
      * Connect rooms with corridors and establish neighbor relationships
