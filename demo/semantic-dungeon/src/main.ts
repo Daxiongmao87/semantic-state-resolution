@@ -334,6 +334,7 @@ async function handleInspection(x: number, y: number): Promise<void> {
         dungeonLayout,
         x,
         y,
+        playerController?.getPlayer().inventory || [],
         () => {
             // Re-enable input when modal closes
             playerController?.setInputEnabled(true);

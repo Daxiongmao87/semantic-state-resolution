@@ -22,6 +22,7 @@ interface ModalState {
     history: string[];  // Previous interaction results for context
     suggestions: string[];  // AI-suggested actions
     suggestionsLoading: boolean;
+    inventory: string[];
 }
 
 const state: ModalState = {
@@ -35,7 +36,8 @@ const state: ModalState = {
     isLoading: false,
     history: [],
     suggestions: [],
-    suggestionsLoading: false
+    suggestionsLoading: false,
+    inventory: []
 };
 
 let modalElement: HTMLElement | null = null;
@@ -53,12 +55,14 @@ export async function openInspectionModal(
     layout: DungeonLayout,
     x: number,
     y: number,
+    inventory: string[],
     onClose?: () => void,
     onInventoryAdd?: (item: string) => void
 ): Promise<void> {
     state.layout = layout;
     state.x = x;
     state.y = y;
+    state.inventory = inventory;
     state.isLoading = true;
     state.isOpen = true;
     state.history = [];
@@ -261,7 +265,7 @@ async function handleInteract(): Promise<void> {
     renderModal();
 
     try {
-        const result = await interactWithTile(state.layout, state.x, state.y, action);
+        const result = await interactWithTile(state.layout, state.x, state.y, action, state.inventory);
 
         // Update state with result
         state.currentDescription = result.description;
@@ -270,6 +274,7 @@ async function handleInteract(): Promise<void> {
         // Handle Semantic Actions (Loot)
         if (result.semanticAction === 'pickup' && result.item && onInventoryAddCallback) {
             onInventoryAddCallback(result.item);
+            state.inventory.push(result.item); // Keep local state in sync
             state.history.push(`> You picked up: ${result.item}`);
             state.currentDescription += `\n(Added to Inventory: ${result.item})`;
 
@@ -323,12 +328,14 @@ async function fetchSuggestions(): Promise<void> {
                 objectType: state.objectType,
                 tileType: state.tileType,
                 history: state.history.slice(-5),
+                inventory: state.inventory.join(', '),
                 instruction: `Given this scene and its current state, suggest exactly 3 short action phrases (2-4 words each) that a player could take NOW.
 
 ${historyContext}
+Player Inventory: [${state.inventory.join(', ')}]
 Current description: "${state.currentDescription}"
 
-IMPORTANT: Consider what has ALREADY been done. If a door is already open, suggest "walk through" or "close door", NOT "open door". If something was already searched, don't suggest searching again.
+IMPORTANT: Consider what has ALREADY been done. If a door is already open, suggest "walk through" or "close door", NOT "open door". If something was already searched, don't suggest searching again. If player has a key, suggest "unlock door".
 
 Return ONLY a JSON object with a "suggestions" array of 3 strings. Example: {"suggestions": ["walk through", "look inside", "close door"]}`
             },

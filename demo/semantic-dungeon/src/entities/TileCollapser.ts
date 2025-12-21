@@ -154,7 +154,8 @@ export async function interactWithTile(
     layout: DungeonLayout,
     x: number,
     y: number,
-    action: string = 'use'
+    action: string = 'use',
+    inventory: string[] = []
 ): Promise<InspectionResult> {
     // Bounds check
     if (y < 0 || y >= layout.tiles.length || x < 0 || x >= layout.tiles[0].length) {
@@ -218,7 +219,7 @@ export async function interactWithTile(
     }
 
     // No object - interact with the tile itself (door, wall, floor)
-    const description = await interactWithTileType(layout, x, y, tileType, room, action);
+    const description = await interactWithTileType(layout, x, y, tileType, room, action, inventory);
 
     return {
         success: true,
@@ -356,7 +357,8 @@ async function interactWithTileType(
     y: number,
     tileType: TileType,
     room: RoomEntity | null,
-    action: string
+    action: string,
+    inventory: string[]
 ): Promise<string> {
     const roomContext = room ? {
         roomType: room.components.roomType || 'unknown chamber',
@@ -370,7 +372,7 @@ async function interactWithTileType(
     // Special handling for Doors: Route ALL interactions to the semantic handler
     // This allows "kick", "smash", "listen", etc. to be processed by the LLM
     if (tileType === 'door') {
-        return handleDoorInteraction(room, x, y, action);
+        return handleDoorInteraction(room, x, y, action, inventory);
     }
 
     try {
@@ -414,7 +416,8 @@ async function handleDoorInteraction(
     room: RoomEntity | null,
     x: number,
     y: number,
-    action: string
+    action: string,
+    inventory: string[]
 ): Promise<string> {
     if (!room) return "The door is jammed.";
 
@@ -438,22 +441,24 @@ async function handleDoorInteraction(
                 theme: room.components.theme,
                 action,
                 doorState: door.state,
+                inventory: inventory.join(', '),
                 instruction: `Entity: Door (State: ${door.state})
 Context: ${room.components.roomType} (${room.components.theme}).
+Player Inventory: [${inventory.join(', ')}]
 User Action: "${action}"
 
 SIMULATION TASK:
-1. Analyze the Action + Current State. 
+1. Analyze the Action + Current State + Inventory. 
 2. Determine the RESULTING State.
    - Passive (look, check) -> State remains '${door.state}'.
    - Manipulation (open) -> If 'closed', changing to 'open' (80%) or 'locked' (20%).
    - Closing (close) -> If 'open', change to 'closed'.
    - Destruction (kick) -> If successful, 'broken' (treat as open). If fail, 'closed'.
-   - Locking (lock) -> If key possessed, 'locked'.
+   - Locking (lock) -> ONLY if player has the specific key in inventory, change to 'locked'.
 
 PHYSICS/THEME VALIDATION:
 - "Looting" a door is impossible -> State remains '${door.state}'. Describe failure.
-- "Locked" state implies a specific key is needed.`
+- "Locked" state implies a specific key is needed. Player MUST have key to lock it.`
             },
             constraints: { hard: [], soft: [] },
             whitelist: {
@@ -487,6 +492,15 @@ PHYSICS/THEME VALIDATION:
 
         // Handle side effects based on semantic category, not exact string
         if (LOCKED_STATES.includes(newState)) {
+            // Validate: Does player have the key?
+            const hasKey = inventory.some(item => item.toLowerCase() === keyName.toLowerCase());
+
+            // Hard Constraint: Cannot lock without key
+            if (!hasKey) {
+                console.warn(`[SWFC] Rejected 'locked' state - Player missing key: ${keyName}`);
+                return `You attempt to lock the door, but you realize you don't have the ${keyName}.`;
+            }
+
             // Reverse Propagation for any locked-category state
             getRoomHorizonQueue().injectReversePropagationConstraint(room.id, 'required_object', keyName);
 
