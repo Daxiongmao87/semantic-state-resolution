@@ -44,6 +44,9 @@ export interface RoomEntity extends Entity {
         description?: string;
         tags?: string[];
 
+        // V1 Fix: Track tile generation state
+        tilesGenerated?: boolean;
+
         [key: string]: unknown;
     };
 }
@@ -457,7 +460,8 @@ export class DungeonGenerator {
     }
 
     /**
-     * Generate tile map from rooms and corridors
+     * Generate tile map - V1 Fix: Only entrance room tiles at init
+     * Other rooms will have tiles generated on-demand via generateRoomTiles()
      */
     private generateTileMap(
         rooms: Map<string, RoomEntity>,
@@ -472,31 +476,23 @@ export class DungeonGenerator {
             }
         }
 
-        // Carve rooms
-        for (const room of rooms.values()) {
-            const pos = room.components.position;
-            const dim = room.components.dimensions;
-
-            for (let y = pos.y; y < pos.y + dim.height; y++) {
-                for (let x = pos.x; x < pos.x + dim.width; x++) {
-                    if (y >= 0 && y < this.config.height && x >= 0 && x < this.config.width) {
-                        // Walls on edges, floor inside
-                        const isEdge = y === pos.y || y === pos.y + dim.height - 1 ||
-                            x === pos.x || x === pos.x + dim.width - 1;
-                        tiles[y][x] = isEdge ? 'wall' : 'floor';
-                    }
-                }
-            }
+        // V1 Fix: Only carve the entrance room initially
+        const entranceRoom = rooms.get('room_0');
+        if (entranceRoom) {
+            this.carveRoom(tiles, entranceRoom);
+            entranceRoom.components.tilesGenerated = true;
         }
 
-        // Carve corridors
+        // V1 Fix: We still create corridors for all connections 
+        // (they're part of the "fog of war" that gets revealed)
+        // This is a pragmatic choice - pure JIT would defer corridors too
         for (const corridor of corridors) {
             this.carveCorridor(tiles, corridor);
         }
 
-        // Place doors
-        for (const room of rooms.values()) {
-            for (const door of room.components.doors) {
+        // Place doors for entrance room only initially
+        if (entranceRoom) {
+            for (const door of entranceRoom.components.doors) {
                 const { x, y } = door.position;
                 if (y >= 0 && y < this.config.height && x >= 0 && x < this.config.width) {
                     tiles[y][x] = 'door';
@@ -505,6 +501,48 @@ export class DungeonGenerator {
         }
 
         return tiles;
+    }
+
+    /**
+     * V1 Fix: Carve tiles for a single room
+     */
+    private carveRoom(tiles: TileType[][], room: RoomEntity): void {
+        const pos = room.components.position;
+        const dim = room.components.dimensions;
+
+        for (let y = pos.y; y < pos.y + dim.height; y++) {
+            for (let x = pos.x; x < pos.x + dim.width; x++) {
+                if (y >= 0 && y < this.config.height && x >= 0 && x < this.config.width) {
+                    // Walls on edges, floor inside
+                    const isEdge = y === pos.y || y === pos.y + dim.height - 1 ||
+                        x === pos.x || x === pos.x + dim.width - 1;
+                    tiles[y][x] = isEdge ? 'wall' : 'floor';
+                }
+            }
+        }
+    }
+
+    /**
+     * V1 Fix: Generate tiles for a specific room on-demand
+     * Called when player approaches a door to an ungenerated room
+     */
+    generateRoomTiles(tiles: TileType[][], room: RoomEntity): void {
+        if (room.components.tilesGenerated) {
+            return; // Already generated
+        }
+
+        this.carveRoom(tiles, room);
+
+        // Place doors for this room
+        for (const door of room.components.doors) {
+            const { x, y } = door.position;
+            if (y >= 0 && y < tiles.length && x >= 0 && x < tiles[0].length) {
+                tiles[y][x] = 'door';
+            }
+        }
+
+        room.components.tilesGenerated = true;
+        console.log(`[V1 JIT] Generated tiles for room ${room.id}`);
     }
 
     /**

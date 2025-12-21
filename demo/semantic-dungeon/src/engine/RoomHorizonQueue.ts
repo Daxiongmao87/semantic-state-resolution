@@ -265,6 +265,9 @@ export class RoomHorizonQueue {
             // Create proper ObjectEntity instances for each slot
             await this.createRoomObjects(room, result);
 
+            // V1 Fix: Generate tiles for this room NOW (JIT tile generation)
+            this.generateRoomTilesJIT(room);
+
             // DETAILED LOGGING FOR DEBUGGING
             console.log(`[Room Collapse] ${roomId} -> ${result.roomType} (${result.theme})`);
             console.log(`[Room Objects] ${roomId} -> ${result.objectTypes.join(', ')}`);
@@ -578,6 +581,43 @@ Provide 'object_count' as an integer, then provide exactly that many 'visible_ob
         }
 
         return slots;
+    }
+
+    /**
+     * V1 Fix: Generate tiles for a room JIT when it collapses
+     * This implements the JIT tile generation principle
+     */
+    private generateRoomTilesJIT(room: RoomEntity): void {
+        if (!this.layout) return;
+        if (room.components.tilesGenerated) return; // Already done
+
+        const tiles = this.layout.tiles;
+        const pos = room.components.position;
+        const dim = room.components.dimensions;
+        const height = this.layout.height;
+        const width = this.layout.width;
+
+        // Carve room tiles
+        for (let y = pos.y; y < pos.y + dim.height; y++) {
+            for (let x = pos.x; x < pos.x + dim.width; x++) {
+                if (y >= 0 && y < height && x >= 0 && x < width) {
+                    const isEdge = y === pos.y || y === pos.y + dim.height - 1 ||
+                        x === pos.x || x === pos.x + dim.width - 1;
+                    tiles[y][x] = isEdge ? 'wall' : 'floor';
+                }
+            }
+        }
+
+        // Place doors for this room
+        for (const door of room.components.doors) {
+            const { x, y } = door.position;
+            if (y >= 0 && y < height && x >= 0 && x < width) {
+                tiles[y][x] = 'door';
+            }
+        }
+
+        room.components.tilesGenerated = true;
+        console.log(`[V1 JIT] Tiles generated for ${room.id} at (${pos.x}, ${pos.y}) ${dim.width}x${dim.height}`);
     }
 
     /**
