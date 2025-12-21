@@ -9,6 +9,7 @@ import type { SolverRequest, Constraint } from '../types';
 import { createObjectEntity, resetObjectIdCounter, type ObjectEntity } from '../entities/ObjectEntity';
 import { collapseObjectType } from '../entities/ObjectCollapser';
 import { getFallbackRoomResult } from './FallbackTable';
+import { getInspirationContext } from './InspirationSeed';
 
 // =============================================================================
 // Types
@@ -369,6 +370,10 @@ export class RoomHorizonQueue {
             ? `\n\nGLOBAL HISTORY (Existing Rooms): [${historyContext}]\nANTI-REPETITION RULE: You MUST avoid generating room types that have already been generated frequently, unless thematically essential (e.g. 'barracks' might appear twice). If 'torture_chamber' count > 0, DO NOT generate another.`
             : '';
 
+        // Inspiration Seed - soft creative inspiration to break entropy traps
+        const inspiration = getInspirationContext(room.id);
+        console.log(`[Inspiration] ${room.id} -> "${inspiration.word}"`);
+
         const request: SolverRequest = {
             requestId: `collapse_room_${room.id}_${Date.now()}`,
             taskType: 'COLLAPSE_ROOM',
@@ -385,6 +390,7 @@ export class RoomHorizonQueue {
                     ? `This is the dungeon entrance. Create a unique threshold room that serves as a transition into this specific quest-driven dungeon.${questContext}`
                     : `Create a unique dungeon room. 
 ${historyInstruction}
+${inspiration.prompt}
 
 CRITICAL VARIETY RULE: Check the neighboring rooms. You must generate a *different* type of room. If neighbors are 'throne_room', you must NOT create a 'throne_room'. Instead, create a supporting room (e.g., 'scullery', 'guard_post', 'secret_passage', 'torture_chamber').
 
