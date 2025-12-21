@@ -490,9 +490,10 @@ export class DungeonGenerator {
             this.carveCorridor(tiles, corridor);
         }
 
-        // Place doors for entrance room only initially
-        if (entranceRoom) {
-            for (const door of entranceRoom.components.doors) {
+        // Place ALL doors at init - doors are visible even if room behind is void
+        // This lets player see where corridors lead
+        for (const room of rooms.values()) {
+            for (const door of room.components.doors) {
                 const { x, y } = door.position;
                 if (y >= 0 && y < this.config.height && x >= 0 && x < this.config.width) {
                     tiles[y][x] = 'door';
