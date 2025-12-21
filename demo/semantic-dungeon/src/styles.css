@@ -962,3 +962,30 @@ body:has(#dungeon-container) #app {
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
+
+/* Keyboard hint on suggestion buttons */
+.kbd-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: rgba(139, 92, 246, 0.3);
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin-right: 0.4rem;
+  color: var(--accent-primary);
+}
+
+.suggestion-btn:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.3);
+  background: var(--bg-hover);
+}
+
+.suggestion-btn:focus .kbd-hint {
+  background: var(--accent-primary);
+  color: white;
+}

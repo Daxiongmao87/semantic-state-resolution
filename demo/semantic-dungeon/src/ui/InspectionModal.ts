@@ -360,18 +360,77 @@ function renderSuggestions(): void {
         return;
     }
 
+    // Add tabindex for keyboard navigation, show number hints
     container.innerHTML = state.suggestions
-        .map((s, i) => `<button class="suggestion-btn" data-index="${i}">${s}</button>`)
+        .map((s, i) => `<button class="suggestion-btn" data-index="${i}" tabindex="0"><span class="kbd-hint">${i + 1}</span>${s}</button>`)
         .join('');
 
     // Bind click events
     container.querySelectorAll('.suggestion-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const inputEl = document.getElementById('modal-action-input') as HTMLInputElement;
-            if (inputEl) {
-                inputEl.value = (btn as HTMLElement).textContent || '';
-                inputEl.focus();
+        btn.addEventListener('click', () => selectSuggestion(btn as HTMLElement));
+
+        // Enter/Space to select when focused
+        btn.addEventListener('keydown', (e) => {
+            const event = e as KeyboardEvent;
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                selectSuggestion(btn as HTMLElement);
+            }
+            // Arrow key navigation
+            if (event.key === 'ArrowRight' || event.key === 'ArrowDown') {
+                event.preventDefault();
+                const next = btn.nextElementSibling as HTMLElement;
+                if (next) next.focus();
+            }
+            if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                event.preventDefault();
+                const prev = btn.previousElementSibling as HTMLElement;
+                if (prev) prev.focus();
             }
         });
     });
+}
+
+/**
+ * Select a suggestion and fill the input
+ */
+function selectSuggestion(btn: HTMLElement): void {
+    const inputEl = document.getElementById('modal-action-input') as HTMLInputElement;
+    if (inputEl) {
+        // Remove the kbd-hint text from the button content
+        const text = btn.textContent?.replace(/^[1-3]/, '').trim() || '';
+        inputEl.value = text;
+        inputEl.focus();
+    }
+}
+
+/**
+ * Handle global keyboard shortcuts for the modal
+ */
+function handleModalKeyboard(e: KeyboardEvent): void {
+    if (!state.isOpen) return;
+
+    // Escape to close
+    if (e.key === 'Escape') {
+        closeInspectionModal();
+        return;
+    }
+
+    // Number keys 1-3 to quickly select suggestions (only when not typing)
+    const inputEl = document.getElementById('modal-action-input') as HTMLInputElement;
+    if (document.activeElement !== inputEl) {
+        const num = parseInt(e.key);
+        if (num >= 1 && num <= 3 && state.suggestions.length >= num) {
+            e.preventDefault();
+            if (inputEl) {
+                inputEl.value = state.suggestions[num - 1];
+                inputEl.focus();
+            }
+        }
+    }
+}
+
+// Register global keyboard handler
+if (typeof window !== 'undefined') {
+    window.addEventListener('keydown', handleModalKeyboard);
 }
