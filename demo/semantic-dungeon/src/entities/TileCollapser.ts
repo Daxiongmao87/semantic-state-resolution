@@ -473,46 +473,45 @@ PHYSICS/THEME VALIDATION:
         const message = String(response.proposal.message);
         const keyName = String(response.proposal.key_name || 'Key');
 
-        // Apply Semantic State Change
-        switch (newState) {
-            case 'locked':
-                door.state = 'locked';
-                // Reverse Propagation
-                getRoomHorizonQueue().injectReversePropagationConstraint(room.id, 'required_object', keyName);
+        // SWFC: Semantic state categories - not hardcoded behavior, but semantic groupings
+        // The LLM proposes a state, we categorize it for game mechanics
+        const TRAVERSABLE_STATES = ['open', 'broken', 'ajar', 'smashed', 'destroyed', 'unlocked'];
+        const BLOCKED_STATES = ['closed', 'shut', 'sealed'];
+        const LOCKED_STATES = ['locked', 'barred', 'magically_sealed', 'warded'];
 
-                eventLog.append({
-                    type: 'CollapseCommitted',
-                    entityId: `door_${x}_${y}`,
-                    components: { state: 'locked', requiredKey: keyName },
-                    tags: ['locked']
-                });
-                return message + ` (Requires: ${keyName})`;
-
-            case 'open':
-            case 'broken': // Treated as open for traversal
-                door.state = 'open';
-                eventLog.append({
-                    type: 'CollapseCommitted',
-                    entityId: `door_${x}_${y}`,
-                    components: { state: 'open' },
-                    tags: ['open']
-                });
-                return message;
-
-            case 'closed':
-                door.state = 'closed';
-                eventLog.append({
-                    type: 'CollapseCommitted',
-                    entityId: `door_${x}_${y}`,
-                    components: { state: 'closed' },
-                    tags: ['closed']
-                });
-                return message;
-
-            default:
-                // Unknown state - leave unchanged
-                return message;
+        // Validate against semantic whitelist
+        const allValidStates = [...TRAVERSABLE_STATES, ...BLOCKED_STATES, ...LOCKED_STATES];
+        if (!allValidStates.includes(newState)) {
+            console.warn(`[SWFC] LLM proposed unknown door state: "${newState}", defaulting to current`);
+            return message;
         }
+
+        // Apply semantic state - store the LLM's actual proposed state
+        door.state = newState as 'open' | 'closed' | 'locked';
+
+        // Handle side effects based on semantic category, not exact string
+        if (LOCKED_STATES.includes(newState)) {
+            // Reverse Propagation for any locked-category state
+            getRoomHorizonQueue().injectReversePropagationConstraint(room.id, 'required_object', keyName);
+
+            eventLog.append({
+                type: 'CollapseCommitted',
+                entityId: `door_${x}_${y}`,
+                components: { state: newState, requiredKey: keyName },
+                tags: ['locked', newState]
+            });
+            return message + ` (Requires: ${keyName})`;
+        }
+
+        // Log the state change
+        eventLog.append({
+            type: 'CollapseCommitted',
+            entityId: `door_${x}_${y}`,
+            components: { state: newState },
+            tags: TRAVERSABLE_STATES.includes(newState) ? ['traversable', newState] : ['blocked', newState]
+        });
+
+        return message;
 
     } catch (e) {
         console.error("Door collapse failed", e);
