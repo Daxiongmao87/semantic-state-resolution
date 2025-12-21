@@ -308,6 +308,12 @@ async function fetchSuggestions(): Promise<void> {
 
     try {
         const solver = getOpenRouterSolver();
+
+        // Build context including interaction history
+        const historyContext = state.history.length > 0
+            ? `Previous actions taken: ${state.history.join(', ')}. `
+            : '';
+
         const response = await solver.solve({
             requestId: `suggestions_${state.x}_${state.y}_${Date.now()}`,
             taskType: 'SUGGEST_ACTIONS',
@@ -316,8 +322,15 @@ async function fetchSuggestions(): Promise<void> {
                 description: state.currentDescription,
                 objectType: state.objectType,
                 tileType: state.tileType,
-                history: state.history.slice(-3),
-                instruction: `Given this scene description, suggest exactly 3 short action phrases (2-4 words each) that a player could take. Return ONLY a JSON object with a "suggestions" array of 3 strings. Example: {"suggestions": ["examine closer", "tip it over", "search underneath"]}`
+                history: state.history.slice(-5),
+                instruction: `Given this scene and its current state, suggest exactly 3 short action phrases (2-4 words each) that a player could take NOW.
+
+${historyContext}
+Current description: "${state.currentDescription}"
+
+IMPORTANT: Consider what has ALREADY been done. If a door is already open, suggest "walk through" or "close door", NOT "open door". If something was already searched, don't suggest searching again.
+
+Return ONLY a JSON object with a "suggestions" array of 3 strings. Example: {"suggestions": ["walk through", "look inside", "close door"]}`
             },
             constraints: { hard: [], soft: [] },
             whitelist: {
