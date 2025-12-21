@@ -266,6 +266,15 @@ export interface PlayerState {
     currentRoomId: string | null;
     inventory: string[];
     equipment: EquipmentSlots;
+    // Character System
+    name?: string;
+    race?: RaceData;
+    class?: ClassData;
+    abilities?: AbilityScores;
+    skills?: Record<string, number>;
+    level?: number;
+    maxHp?: number;
+    hp?: number;
 }
 
 export interface EquipmentSlots {
@@ -273,4 +282,26 @@ export interface EquipmentSlots {
     chest: string | null;
     mainHand: string | null;
     offHand: string | null;
+}
+
+// Character System Types (Phase 2)
+export interface RaceData {
+    name: string;
+    description: string;
+    traits: string[];
+}
+
+export interface ClassData {
+    name: string;
+    description: string;
+    abilities: string[]; // Ability IDs
+}
+
+export interface AbilityScores {
+    str: number;
+    dex: number;
+    con: number;
+    int: number;
+    wis: number;
+    cha: number;
 }

@@ -3,8 +3,9 @@
  * Supports two modes: Class Generation and Dungeon Exploration
  */
 
+import './styles.css';
 import { getOpenRouterSolver } from './solver/OpenRouterSolver';
-import { ClassGeneratorUI } from './ui/ClassGeneratorUI';
+import { CharacterCreation } from './ui/CharacterCreation';
 import { DungeonGenerator, type DungeonLayout } from './dungeon/DungeonGenerator';
 import { DungeonRenderer } from './renderer/DungeonRenderer';
 import type { PlayerState } from './types';
@@ -14,15 +15,16 @@ import { getEventLog } from './engine/EventLog';
 import { clearTileCache } from './entities/TileCollapser';
 import { openInspectionModal, isModalOpen } from './ui/InspectionModal';
 import { openInventoryModal } from './ui/InventoryModal';
-import { promptForQuest } from './ui/QuestModal';
-import './styles.css';
+import { promptForQuest, QuestResult } from './ui/QuestModal';
+import { appState } from './engine/AppStateManager';
+import { MainMenu } from './ui/MainMenu';
+import { PauseMenu } from './ui/PauseMenu';
+import { GameScreen } from './GameTypes';
 
-type DemoMode = 'class' | 'dungeon';
-
-let currentMode: DemoMode = 'class';
 let dungeonLayout: DungeonLayout | null = null;
 let dungeonRenderer: DungeonRenderer | null = null;
 let playerController: PlayerController | null = null;
+let currentQuest: QuestResult | null = null;
 
 async function init(): Promise<void> {
     console.log('=== SWFC Demo ===');
@@ -44,158 +46,24 @@ async function init(): Promise<void> {
         statusEl.className = 'status error';
     }
 
-    // Setup mode toggle
-    setupModeToggle();
+    // Initialize State Machine
+    setupStateHandling();
 
-    // Initialize in class mode by default
-    initClassMode();
+    // Initialize UI Components
+    new MainMenu('main-menu');
+    new PauseMenu();
+
+    // Start at Main Menu
+    appState.switchScreen(GameScreen.MainMenu);
 }
 
-function setupModeToggle(): void {
-    const container = document.getElementById('app')!;
-
-    // Create mode toggle UI
-    const toggleHtml = `
-        <div class="mode-toggle">
-            <button id="mode-class" class="btn ${currentMode === 'class' ? 'primary' : 'secondary'}">Class Generation</button>
-            <button id="mode-dungeon" class="btn ${currentMode === 'dungeon' ? 'primary' : 'secondary'}">Dungeon Exploration</button>
-        </div>
-    `;
-
-    // Insert after header
-    const header = container.querySelector('.header-bar');
-    if (header) {
-        header.insertAdjacentHTML('afterend', toggleHtml);
-    }
-
-    // Bind toggle events
-    document.getElementById('mode-class')?.addEventListener('click', () => {
-        if (currentMode !== 'class') {
-            currentMode = 'class';
-            updateModeButtons();
-            initClassMode();
-        }
-    });
-
-    document.getElementById('mode-dungeon')?.addEventListener('click', () => {
-        if (currentMode !== 'dungeon') {
-            currentMode = 'dungeon';
-            updateModeButtons();
-            initDungeonMode();
-        }
-    });
-}
-
-function updateModeButtons(): void {
-    const classBtn = document.getElementById('mode-class');
-    const dungeonBtn = document.getElementById('mode-dungeon');
-
-    if (classBtn) {
-        classBtn.className = `btn ${currentMode === 'class' ? 'primary' : 'secondary'}`;
-    }
-    if (dungeonBtn) {
-        dungeonBtn.className = `btn ${currentMode === 'dungeon' ? 'primary' : 'secondary'}`;
-    }
-}
-
-function initClassMode(): void {
-    console.log('[Mode] Switching to Class Generation');
-
-    const container = document.getElementById('class-generator')!;
-    container.style.display = 'block';
-
-    const dungeonContainer = document.getElementById('dungeon-container');
-    if (dungeonContainer) {
-        dungeonContainer.style.display = 'none';
-    }
-
-    // Initialize Class Generator UI (only once)
-    if (!container.hasChildNodes()) {
-        new ClassGeneratorUI('class-generator');
-    }
-}
-
-function initDungeonMode(): void {
-    console.log('[Mode] Switching to Dungeon Exploration');
-
-    const classContainer = document.getElementById('class-generator')!;
-    classContainer.style.display = 'none';
-
-    // Create or show dungeon container
-    let dungeonContainer = document.getElementById('dungeon-container');
-    if (!dungeonContainer) {
-        dungeonContainer = document.createElement('div');
-        dungeonContainer.id = 'dungeon-container';
-        dungeonContainer.innerHTML = `
-            <div class="dungeon-ui">
-                <div class="dungeon-view">
-                    <canvas id="dungeon-canvas"></canvas>
-                </div>
-                <div class="dungeon-sidebar">
-                    <div class="panel">
-                        <h3>Room Info</h3>
-                        <div id="room-info">
-                            <p class="empty">Enter a room to see its details.</p>
-                        </div>
-                    </div>
-                    <div class="panel">
-                        <h3>Inspection</h3>
-                        <div id="inspection-result">
-                            <p class="empty">Press E to inspect what's in front of you.</p>
-                        </div>
-                    </div>
-                    <div class="panel">
-                        <h3>Horizon Queue</h3>
-                        <div id="horizon-status"></div>
-                    </div>
-                    <div class="panel">
-                        <h3>Event Log</h3>
-                        <div id="dungeon-events" class="log-content"></div>
-                    </div>
-                    <div class="actions">
-                        <button id="inventory-btn" class="btn secondary">Inventory (I)</button>
-                        <button id="new-dungeon-btn" class="btn secondary">New Dungeon</button>
-                    </div>
-                </div>
-            </div>
-        `;
-        document.getElementById('app')!.appendChild(dungeonContainer);
-
-        // Prompt for quest then generate dungeon
-        promptForQuest().then(quest => {
-            generateDungeon(quest);
-        });
-
-        // Bind new dungeon button
-        document.getElementById('new-dungeon-btn')?.addEventListener('click', async () => {
-            const quest = await promptForQuest();
-            generateDungeon(quest);
-        });
-
-        // Bind inventory button
-        document.getElementById('inventory-btn')?.addEventListener('click', () => {
-            if (playerController) {
-                playerController.setInputEnabled(false);
-                openInventoryModal(playerController.getPlayer(), () => {
-                    playerController?.setInputEnabled(true);
-                });
-            }
-        });
-    } else {
-        dungeonContainer.style.display = 'block';
-    }
-}
-
-let currentQuest: string = '';
-
-async function generateDungeon(quest: string): Promise<void> {
-    console.log('[Dungeon] Generating new dungeon with quest:', quest);
+async function generateDungeon(quest: QuestResult): Promise<void> {
+    console.log('[Dungeon] Generating with quest:', quest.description);
+    currentQuest = quest;
 
     // Show loading overlay
     const overlay = document.getElementById('loading-overlay');
     if (overlay) overlay.classList.remove('hidden');
-
-    currentQuest = quest;
 
     // Clear tile cache from previous dungeon
     clearTileCache();
@@ -214,9 +82,10 @@ async function generateDungeon(quest: string): Promise<void> {
     dungeonRenderer = new DungeonRenderer('dungeon-canvas');
     dungeonRenderer.setLayout(dungeonLayout);
 
-    // Initialize horizon queue with quest as constraint
+    // Initialize horizon with structured constraints
     const horizonQueue = getRoomHorizonQueue();
-    horizonQueue.initialize(dungeonLayout, [currentQuest]);
+    const constraints = [...quest.constraints, `Quest: ${quest.description}`];
+    horizonQueue.initialize(dungeonLayout, constraints);
 
     // Subscribe to queue updates
     horizonQueue.subscribe(() => {
@@ -274,6 +143,108 @@ async function generateDungeon(quest: string): Promise<void> {
     if (overlay) overlay.classList.add('hidden');
     playerController.setInputEnabled(true);
 }
+
+function setupStateHandling() {
+    appState.subscribe((screen: GameScreen) => {
+        console.log(`[Main] Screen changed to: ${screen}`);
+
+        switch (screen) {
+            case GameScreen.CharacterCreation:
+                initClassMode();
+                break;
+            case GameScreen.Gameplay:
+                initDungeonMode();
+                break;
+            case GameScreen.MainMenu:
+                // Cleanup if needed
+                break;
+        }
+    });
+}
+
+// ... initClassMode ...
+function initClassMode(): void {
+    const container = document.getElementById('class-generator')!;
+    // Always create new instance to refresh config?
+    // Or just clear it.
+    container.innerHTML = '';
+    new CharacterCreation('class-generator');
+}
+
+function initDungeonMode(): void {
+    console.log('[Mode] Switching to Dungeon Exploration');
+
+    const classContainer = document.getElementById('class-generator')!;
+    classContainer.style.display = 'none';
+
+    // Create or show dungeon container
+    let dungeonContainer = document.getElementById('dungeon-container');
+    if (dungeonContainer) {
+        dungeonContainer.remove(); // Force reset to clean state (fix "Canvas not found")
+    }
+
+    dungeonContainer = document.createElement('div');
+    dungeonContainer.id = 'dungeon-container';
+    dungeonContainer.innerHTML = `
+        <div class="dungeon-ui">
+            <div class="dungeon-view">
+                <canvas id="dungeon-canvas"></canvas>
+            </div>
+            <div class="dungeon-sidebar">
+                <div class="panel">
+                    <h3>Room Info</h3>
+                    <div id="room-info">
+                        <p class="empty">Enter a room to see its details.</p>
+                    </div>
+                </div>
+                <div class="panel">
+                    <h3>Inspection</h3>
+                    <div id="inspection-result">
+                        <p class="empty">Press E to inspect what's in front of you.</p>
+                    </div>
+                </div>
+                <div class="panel">
+                    <h3>Horizon Queue</h3>
+                    <div id="horizon-status"></div>
+                </div>
+                <div class="panel">
+                    <h3>Event Log</h3>
+                    <div id="dungeon-events" class="log-content"></div>
+                </div>
+                <div class="actions">
+                    <button id="inventory-btn" class="btn secondary">Inventory (I)</button>
+                    <button id="new-dungeon-btn" class="btn secondary">New Dungeon</button>
+                </div>
+            </div>
+        </div>
+    `;
+    document.getElementById('app')!.appendChild(dungeonContainer);
+
+    // Bind new dungeon button
+    document.getElementById('new-dungeon-btn')?.addEventListener('click', async () => {
+        const quest = await promptForQuest();
+        generateDungeon(quest);
+    });
+
+    // Bind inventory button
+    document.getElementById('inventory-btn')?.addEventListener('click', () => {
+        if (playerController) {
+            playerController.setInputEnabled(false);
+            openInventoryModal(playerController.getPlayer(), () => {
+                playerController?.setInputEnabled(true);
+            });
+        }
+    });
+
+    // Always check if we need to generate a dungeon (e.g. New Game or Refresh)
+    if (!dungeonLayout) {
+        promptForQuest().then(quest => {
+            generateDungeon(quest);
+        });
+    }
+}
+
+
 
 /**
  * Poll until a room is fully collapsed
@@ -388,6 +359,7 @@ async function handleInspection(x: number, y: number): Promise<void> {
         x,
         y,
         playerController?.getPlayer().inventory || [],
+        playerController?.getPlayer()!, // Pass full player state (with ! assertion as we checked controller exists above? No, controller is optional check? Handle safely)
         () => {
             // Re-enable input when modal closes
             playerController?.setInputEnabled(true);

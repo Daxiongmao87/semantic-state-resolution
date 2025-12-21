@@ -3,12 +3,16 @@
  */
 
 import type { DungeonLayout } from '../dungeon/DungeonGenerator';
-import { inspectTile, interactWithTile } from '../entities/TileCollapser';
+import { inspectTile, interactWithTile, MechanicsLog } from '../entities/TileCollapser';
 import { getOpenRouterSolver } from '../solver/OpenRouterSolver';
+
+import { appState } from '../engine/AppStateManager';
 
 // =============================================================================
 // Modal State
 // =============================================================================
+
+import type { PlayerState } from '../types';
 
 interface ModalState {
     isOpen: boolean;
@@ -19,10 +23,13 @@ interface ModalState {
     objectType: string | null;
     tileType: string;
     isLoading: boolean;
-    history: string[];  // Previous interaction results for context
-    suggestions: string[];  // AI-suggested actions
+    history: string[];
+    suggestions: string[];
     suggestionsLoading: boolean;
+
     inventory: string[];
+    playerState: PlayerState | null;
+    mechanics: MechanicsLog | null; // Added
 }
 
 const state: ModalState = {
@@ -37,7 +44,9 @@ const state: ModalState = {
     history: [],
     suggestions: [],
     suggestionsLoading: false,
-    inventory: []
+    inventory: [],
+    playerState: null,
+    mechanics: null // Added
 };
 
 let modalElement: HTMLElement | null = null;
@@ -56,6 +65,7 @@ export async function openInspectionModal(
     x: number,
     y: number,
     inventory: string[],
+    playerState: PlayerState, // Added
     onClose?: () => void,
     onInventoryAdd?: (item: string) => void
 ): Promise<void> {
@@ -63,6 +73,7 @@ export async function openInspectionModal(
     state.x = x;
     state.y = y;
     state.inventory = inventory;
+    state.playerState = playerState; // stored
     state.isLoading = true;
     state.isOpen = true;
     state.history = [];
@@ -215,7 +226,32 @@ function renderModal(): void {
                 </div>
             `;
         } else {
-            descEl.innerHTML = `<p>${state.currentDescription}</p>`;
+            descEl.innerHTML = `<p style="white-space: pre-wrap">${state.currentDescription}</p>`;
+
+            // Render Mechanics IF they exist
+            if (state.mechanics) {
+                const m = state.mechanics;
+                const statusColor = m.outcome === 'success' ? '#4caf50' : '#f44336';
+                descEl.innerHTML += `
+                    <div class="mechanics-log" style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.4); border-left: 4px solid ${statusColor}; font-family: monospace; font-size: 0.9em;">
+                        <div style="font-weight: bold; color: #aaa; margin-bottom: 5px;">${m.skill.toUpperCase()} CHECK</div>
+                        <div style="display: flex; justify-content: space-between;">
+                            <span>Roll: ${m.roll} + ${m.modifier}</span>
+                            <span style="font-weight: bold;">= ${m.total}</span>
+                        </div>
+                         <div style="display: flex; justify-content: space-between; border-bottom: 1px solid #444; padding-bottom: 5px;">
+                            <span>Difficulty Class (DC)</span>
+                            <span>${m.difficultyClass}</span>
+                        </div>
+                        <div style="margin-top: 5px; color: ${statusColor}; font-weight: bold; text-align: right;">
+                            ${m.outcome.toUpperCase()}
+                        </div>
+                        <div style="margin-top: 5px; font-style: italic; color: #888; font-size: 0.8em;">
+                            "${m.reasoning}"
+                        </div>
+                    </div>
+                `;
+            }
         }
     }
 
@@ -265,10 +301,14 @@ async function handleInteract(): Promise<void> {
     renderModal();
 
     try {
-        const result = await interactWithTile(state.layout, state.x, state.y, action, state.inventory);
+        const savedState = appState.loadGame();
+        const playerState = savedState?.playerState || null;
+
+        const result = await interactWithTile(state.layout, state.x, state.y, action, state.inventory, playerState);
 
         // Update state with result
         state.currentDescription = result.description;
+        state.mechanics = result.mechanics || null; // Update mechanics
         state.isLoading = false;
 
         // Handle Semantic Actions (Loot)

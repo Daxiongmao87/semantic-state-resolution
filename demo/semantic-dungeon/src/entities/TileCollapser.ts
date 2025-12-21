@@ -46,6 +46,16 @@ export function getTileDescription(x: number, y: number): TileDescription | unde
 // Inspection
 // =============================================================================
 
+export interface MechanicsLog {
+    skill: string;
+    difficultyClass: number;
+    roll: number;
+    modifier: number;
+    total: number;
+    outcome: 'success' | 'failure';
+    reasoning: string;
+}
+
 export interface InspectionResult {
     success: boolean;
     tileType: TileType;
@@ -58,6 +68,7 @@ export interface InspectionResult {
     items?: string[]; // V2 Semantic Generation
     outcome?: 'steady' | 'modified' | 'destroyed';
     generatedItems?: string[];
+    mechanics?: MechanicsLog;
 }
 
 /**
@@ -153,12 +164,19 @@ export async function inspectTile(
 /**
  * Interact with a tile (e.g., open a door, use an object)
  */
+import { getActionArbiter } from '../engine/ActionArbiter';
+import type { PlayerState } from '../types';
+
+/**
+ * Interact with a tile (e.g., open a door, use an object)
+ */
 export async function interactWithTile(
     layout: DungeonLayout,
     x: number,
     y: number,
     action: string = 'use',
-    inventory: string[] = []
+    inventory: string[],
+    playerState: PlayerState | null // Added
 ): Promise<InspectionResult> {
     // Bounds check
     if (y < 0 || y >= layout.tiles.length || x < 0 || x >= layout.tiles[0].length) {
@@ -174,6 +192,67 @@ export async function interactWithTile(
     const tileType = layout.tiles[y][x];
     const room = findRoomContainingTile(layout, x, y);
 
+    // Arbitration Phase
+    // Arbitration Phase
+    let arbitrationContext = "";
+    let arbitrationOutcome = "success"; // default
+    let mechanicsLog: MechanicsLog | undefined = undefined;
+
+    if (playerState) {
+        const arbiter = getActionArbiter();
+        const targetDesc = `${tileType} in ${room?.components.roomType || 'dungeon'}`;
+
+        try {
+            const judgment = await arbiter.arbitrate(action, targetDesc, playerState);
+
+            if (judgment.checkRequired) {
+                // Perform Skill Check
+                const skillName = judgment.skill?.toLowerCase() || 'luck';
+                const dc = judgment.dc || 10;
+
+                // Get modifier from player stats
+                // Simple mapping for now:
+                // Athletics -> STR, Acrobatics/Stealth -> DEX, Others -> INT/WIS
+                let mod = 0;
+                const stats = playerState.abilities;
+                if (stats) {
+                    if (['athletics'].includes(skillName)) mod = Math.floor((stats.str - 10) / 2);
+                    else if (['acrobatics', 'stealth', 'sleight_of_hand'].includes(skillName)) mod = Math.floor((stats.dex - 10) / 2);
+                    else mod = Math.floor((stats.int - 10) / 2); // Default to INT for others
+                }
+
+                // Roll D20
+                const roll = Math.floor(Math.random() * 20) + 1;
+                const total = roll + mod;
+                const success = total >= dc;
+
+                arbitrationOutcome = success ? "success" : "failure";
+
+                // Construct Log
+                mechanicsLog = {
+                    skill: judgment.skill || 'Check',
+                    difficultyClass: dc,
+                    roll: roll,
+                    modifier: mod,
+                    total: total,
+                    outcome: success ? 'success' : 'failure',
+                    reasoning: judgment.reasoning
+                };
+
+                arbitrationContext = `
+                SKILL CHECK: ${judgment.skill} (DC ${dc})
+                ROLL: ${roll} + ${mod} = ${total}
+                OUTCOME: ${success ? "SUCCESS" : "FAILURE"}
+                Arbiter Reasoning: ${judgment.reasoning}
+                `;
+            } else {
+                arbitrationContext = `Action considered trivial. Reasoning: ${judgment.reasoning}`;
+            }
+        } catch (e) {
+            console.warn("Arbitration failed, proceeding with default physics.", e);
+        }
+    }
+
     // Check for object at this position
     const horizonQueue = getRoomHorizonQueue();
     if (room) {
@@ -183,28 +262,23 @@ export async function interactWithTile(
         );
 
         if (objectHere) {
-            // Collapse object contents
-            // Wait - we need to know if the interaction resulted in a pickup
-            // But collapseObjectContents only returns a string?
-            // We should modify collapseObjectContents logic or parse the string?
-            // BETTER: Use interactionState or specific logic.
-            // For now, let's assume collapseObjectContents handles desc.
-            // We need to inject Semantic Logic here.
+            // Inject Arbitration Context into Action for Object Collapser
+            // Note: recursive structure needs update or we pass context via string hack?
+            // Ideally we pass 'arbitrationOutcome' to collapseObjectContents
+            // For now, prepend to action string as hint? Or update ObjectCollapser signature.
+            // Let's prepend context to action for now to avoid breaking ObjectCollapser signature yet.
+            const augmentedAction = `[Outcome: ${arbitrationOutcome}] ${action}. Context: ${arbitrationContext}`;
 
-            // TODO: Update ObjectCollapser to return structured data.
-            // For now, simple object interaction.
             // V2 Semantic Interaction
-            const result = await collapseObjectContents(objectHere, action);
+            const result = await collapseObjectContents(objectHere, augmentedAction);
 
             let semanticAction: 'pickup' | 'other' | undefined = undefined;
             const generatedItems = result.generatedItems || [];
 
-            // Protocol: If items generated, we imply pickup behavior
             if (generatedItems.length > 0) {
                 semanticAction = 'pickup';
             }
 
-            // Handle Destruction
             if (result.outcome === 'destroyed') {
                 if (room) {
                     horizonQueue.removeObjectFromRoom(room.id, objectHere.id);
@@ -212,27 +286,25 @@ export async function interactWithTile(
                 }
             }
 
-            // Note: Modification is handled inside collapseObjectContents (updates components in place)
-
-            const cleanDescription = result.message;
-
             return {
                 success: true,
                 tileType,
-                description: cleanDescription,
+                description: result.message,
                 objectType: objectHere.components.objectType as string,
                 isObject: true,
                 wasAlreadyCollapsed: false,
                 semanticAction: semanticAction,
-                item: generatedItems[0], // Legacy compat for single item UI
+                item: generatedItems[0],
                 items: generatedItems,
                 outcome: result.outcome,
-                generatedItems: result.generatedItems
+                generatedItems: result.generatedItems,
+                mechanics: mechanicsLog // Added
             };
         }
     }
 
-    // No object - interact with the tile itself (door, wall, floor)
+    // No object - interact with the tile itself
+    // Pass original inventory, original action
     const interaction = await interactWithTileType(layout, x, y, tileType, room, action, inventory);
 
     const generatedItems = interaction.items || [];
@@ -245,7 +317,7 @@ export async function interactWithTile(
     return {
         success: true,
         tileType,
-        description: interaction.message,
+        description: interaction.message, // Raw message
         isObject: false,
         wasAlreadyCollapsed: false,
         semanticAction,
