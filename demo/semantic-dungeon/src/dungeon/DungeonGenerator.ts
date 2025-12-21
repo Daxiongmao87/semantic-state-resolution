@@ -547,13 +547,13 @@ export class DungeonGenerator {
     }
 
     /**
-     * Carve a corridor into the tile map
+     * Carve a corridor into the tile map with walls around it
      */
     private carveCorridor(tiles: TileType[][], corridor: Corridor): void {
         const { start, end, horizontal } = corridor;
 
-        // Helper to carve a single tile (replaces void or wall)
-        const carve = (x: number, y: number): void => {
+        // Helper to carve a floor tile
+        const carveFloor = (x: number, y: number): void => {
             if (y >= 0 && y < tiles.length && x >= 0 && x < tiles[0].length) {
                 // Only carve void or wall tiles (don't overwrite existing floor or door)
                 if (tiles[y][x] === 'void' || tiles[y][x] === 'wall') {
@@ -561,6 +561,18 @@ export class DungeonGenerator {
                 }
             }
         };
+
+        // Helper to place a wall (only on void)
+        const placeWall = (x: number, y: number): void => {
+            if (y >= 0 && y < tiles.length && x >= 0 && x < tiles[0].length) {
+                if (tiles[y][x] === 'void') {
+                    tiles[y][x] = 'wall';
+                }
+            }
+        };
+
+        // Collect all corridor floor positions
+        const floorPositions: { x: number; y: number }[] = [];
 
         if (horizontal) {
             // Horizontal then vertical
@@ -570,14 +582,14 @@ export class DungeonGenerator {
             const minX = Math.min(start.x, midX);
             const maxX = Math.max(start.x, midX);
             for (let x = minX; x <= maxX; x++) {
-                carve(x, start.y);
+                floorPositions.push({ x, y: start.y });
             }
 
             // Vertical segment
             const minY = Math.min(start.y, end.y);
             const maxY = Math.max(start.y, end.y);
             for (let y = minY; y <= maxY; y++) {
-                carve(midX, y);
+                floorPositions.push({ x: midX, y });
             }
         } else {
             // Vertical then horizontal
@@ -587,15 +599,33 @@ export class DungeonGenerator {
             const minY = Math.min(start.y, midY);
             const maxY = Math.max(start.y, midY);
             for (let y = minY; y <= maxY; y++) {
-                carve(start.x, y);
+                floorPositions.push({ x: start.x, y });
             }
 
             // Horizontal segment
             const minX = Math.min(start.x, end.x);
             const maxX = Math.max(start.x, end.x);
             for (let x = minX; x <= maxX; x++) {
-                carve(x, midY);
+                floorPositions.push({ x, y: midY });
             }
+        }
+
+        // First pass: place walls around where floors will go
+        for (const pos of floorPositions) {
+            // Place walls in adjacent void tiles (8 directions)
+            placeWall(pos.x - 1, pos.y - 1);
+            placeWall(pos.x, pos.y - 1);
+            placeWall(pos.x + 1, pos.y - 1);
+            placeWall(pos.x - 1, pos.y);
+            placeWall(pos.x + 1, pos.y);
+            placeWall(pos.x - 1, pos.y + 1);
+            placeWall(pos.x, pos.y + 1);
+            placeWall(pos.x + 1, pos.y + 1);
+        }
+
+        // Second pass: carve floors (overwrites the walls we just placed)
+        for (const pos of floorPositions) {
+            carveFloor(pos.x, pos.y);
         }
     }
 }
