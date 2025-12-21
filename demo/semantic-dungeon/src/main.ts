@@ -176,8 +176,13 @@ function initDungeonMode(): void {
 
 let currentQuest: string = '';
 
-function generateDungeon(quest: string): void {
+async function generateDungeon(quest: string): Promise<void> {
     console.log('[Dungeon] Generating new dungeon with quest:', quest);
+
+    // Show loading overlay
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) overlay.classList.remove('hidden');
+
     currentQuest = quest;
 
     // Clear tile cache from previous dungeon
@@ -228,6 +233,9 @@ function generateDungeon(quest: string): void {
         }
     });
 
+    // Disable input during initial load (prevent 'Enter' leakage)
+    playerController.setInputEnabled(false);
+
     // Initial render
     dungeonRenderer.setPlayer(playerController.getPlayer());
     dungeonRenderer.markRoomVisited(dungeonLayout.entranceRoomId);
@@ -235,9 +243,34 @@ function generateDungeon(quest: string): void {
     // Trigger initial horizon collapse
     horizonQueue.advanceHorizon(dungeonLayout.entranceRoomId);
 
+    // Wait for the first room to collapse (JIT Loading)
+    await waitForRoomCollapse(dungeonLayout.entranceRoomId);
+
     dungeonRenderer.render();
     updateRoomInfo();
     updateHorizonStatus();
+
+    // Hide loading overlay and enable input
+    if (overlay) overlay.classList.add('hidden');
+    playerController.setInputEnabled(true);
+}
+
+/**
+ * Poll until a room is fully collapsed
+ */
+async function waitForRoomCollapse(roomId: string): Promise<void> {
+    if (!dungeonLayout) return;
+    const room = dungeonLayout.rooms.get(roomId);
+    if (!room) return;
+
+    let attempts = 0;
+    while (room.state !== 'collapsed' && attempts < 100) { // 10s timeout
+        await new Promise(r => setTimeout(r, 100));
+        attempts++;
+    }
+    if (attempts >= 100) {
+        console.warn(`[Dungeon] Timed out waiting for ${roomId} to collapse`);
+    }
 }
 
 function updateRoomInfo(): void {
