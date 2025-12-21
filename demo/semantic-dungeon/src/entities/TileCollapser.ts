@@ -457,8 +457,8 @@ PHYSICS/THEME VALIDATION:
             },
             constraints: { hard: [], soft: [] },
             whitelist: {
-                requiredFields: ['new_state', 'key_name', 'message'],
-                explanation: "new_state must be 'locked', 'open', 'closed', or 'broken'. key_name required if locked. message is description."
+                requiredFields: ['new_state', 'message'],
+                explanation: "new_state must be 'locked', 'open', 'closed', or 'broken'. key_name required ONLY if locked. message is description."
             }
         };
 
