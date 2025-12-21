@@ -13,6 +13,7 @@ import { getRoomHorizonQueue } from './engine/RoomHorizonQueue';
 import { getEventLog } from './engine/EventLog';
 import { clearTileCache } from './entities/TileCollapser';
 import { openInspectionModal, isModalOpen } from './ui/InspectionModal';
+import { openInventoryModal } from './ui/InventoryModal';
 import { promptForQuest } from './ui/QuestModal';
 import './styles.css';
 
@@ -152,6 +153,7 @@ function initDungeonMode(): void {
                         <div id="dungeon-events" class="log-content"></div>
                     </div>
                     <div class="actions">
+                        <button id="inventory-btn" class="btn secondary">Inventory (I)</button>
                         <button id="new-dungeon-btn" class="btn secondary">New Dungeon</button>
                     </div>
                 </div>
@@ -168,6 +170,16 @@ function initDungeonMode(): void {
         document.getElementById('new-dungeon-btn')?.addEventListener('click', async () => {
             const quest = await promptForQuest();
             generateDungeon(quest);
+        });
+
+        // Bind inventory button
+        document.getElementById('inventory-btn')?.addEventListener('click', () => {
+            if (playerController) {
+                playerController.setInputEnabled(false);
+                openInventoryModal(playerController.getPlayer(), () => {
+                    playerController?.setInputEnabled(true);
+                });
+            }
         });
     } else {
         dungeonContainer.style.display = 'block';
@@ -230,6 +242,14 @@ async function generateDungeon(quest: string): Promise<void> {
         },
         onInspect: (x: number, y: number) => {
             handleInspection(x, y);
+        },
+        onInventoryToggle: () => {
+            if (playerController) {
+                playerController.setInputEnabled(false);
+                openInventoryModal(playerController.getPlayer(), () => {
+                    playerController?.setInputEnabled(true);
+                });
+            }
         }
     });
 

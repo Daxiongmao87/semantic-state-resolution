@@ -13,6 +13,7 @@ export interface PlayerControllerCallbacks {
     onRoomEnter: (roomId: string, previousRoomId: string | null) => void;
     onRoomExit: (roomId: string) => void;
     onInspect?: (x: number, y: number) => void;
+    onInventoryToggle?: () => void;
 }
 
 export class PlayerController {
@@ -39,7 +40,13 @@ export class PlayerController {
             y: pos.y + Math.floor(dim.height / 2),
             facing: 'south',
             currentRoomId: layout.entranceRoomId,
-            inventory: []
+            inventory: ['Rusty Sword', 'Healing Potion', 'Torch', 'Leather Chest'],
+            equipment: {
+                head: null,
+                chest: null,
+                mainHand: null,
+                offHand: null
+            }
         };
 
         // Log initial position
@@ -125,6 +132,13 @@ export class PlayerController {
                 case ' ': // Spacebar for interaction too
                     e.preventDefault();
                     this.inspect();
+                    return;
+                case 'i':
+                case 'I':
+                    e.preventDefault();
+                    if (this.callbacks.onInventoryToggle) {
+                        this.callbacks.onInventoryToggle();
+                    }
                     return;
             }
 

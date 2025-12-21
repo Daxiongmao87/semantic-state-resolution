@@ -272,14 +272,20 @@ async function handleInteract(): Promise<void> {
         state.isLoading = false;
 
         // Handle Semantic Actions (Loot)
-        if (result.semanticAction === 'pickup' && result.item && onInventoryAddCallback) {
-            onInventoryAddCallback(result.item);
-            state.inventory.push(result.item); // Keep local state in sync
-            state.history.push(`> You picked up: ${result.item}`);
-            state.currentDescription += `\n(Added to Inventory: ${result.item})`;
+        if (result.semanticAction === 'pickup' && onInventoryAddCallback) {
+            // Support V2 Items array or Legacy Item string
+            const acquiredItems = result.items || (result.item ? [result.item] : []);
 
-            // Should we close the modal? Or remove the object from view?
-            // Ideally we'd remove the object from the dungeon data, but for now just visual feedback.
+            if (acquiredItems.length > 0) {
+                acquiredItems.forEach(item => {
+                    if (onInventoryAddCallback) onInventoryAddCallback(item);
+                    state.inventory.push(item); // Keep local state in sync
+                });
+
+                const itemStr = acquiredItems.join(', ');
+                state.history.push(`> You picked up: ${itemStr}`);
+                state.currentDescription += `\n(Added to Inventory: ${itemStr})`;
+            }
         }
 
         // Clear input
@@ -335,9 +341,8 @@ ${historyContext}
 Player Inventory: [${state.inventory.join(', ')}]
 Current description: "${state.currentDescription}"
 
-IMPORTANT: Consider what has ALREADY been done. If a door is already open, suggest "walk through" or "close door", NOT "open door". If something was already searched, don't suggest searching again. If player has a key, suggest "unlock door".
-
-Return ONLY a JSON object with a "suggestions" array of 3 strings. Example: {"suggestions": ["walk through", "look inside", "close door"]}`
+IMPORTANT: Suggest actions that are logically available given the current state and history.
+Return ONLY a JSON object with a "suggestions" array of 3 strings.`
             },
             constraints: { hard: [], soft: [] },
             whitelist: {

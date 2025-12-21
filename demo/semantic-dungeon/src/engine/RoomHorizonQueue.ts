@@ -367,7 +367,7 @@ export class RoomHorizonQueue {
             .join(', ');
 
         const historyInstruction = historyContext
-            ? `\n\nGLOBAL HISTORY (Existing Rooms): [${historyContext}]\nANTI-REPETITION RULE: You MUST avoid generating room types that have already been generated frequently, unless thematically essential (e.g. 'barracks' might appear twice). If 'torture_chamber' count > 0, DO NOT generate another.`
+            ? `\n\nGLOBAL HISTORY (Existing Rooms): [${historyContext}]\nANTI-REPETITION RULE: You MUST avoid generating room types that have already been generated frequently, unless thematically essential. If 'torture_chamber' count > 0, DO NOT generate another.`
             : '';
 
         // Inspiration Seed - soft creative inspiration to break entropy traps
@@ -392,12 +392,12 @@ export class RoomHorizonQueue {
 ${historyInstruction}
 ${inspiration.prompt}
 
-CRITICAL VARIETY RULE: Check the neighboring rooms. You must generate a *different* type of room. If neighbors are 'throne_room', you must NOT create a 'throne_room'. Instead, create a supporting room (e.g., 'scullery', 'guard_post', 'secret_passage', 'torture_chamber').
+CRITICAL VARIETY RULE: Check the neighboring rooms. You must generate a *different* type of room. If neighbors are 'throne_room', you must NOT create a 'throne_room'. Instead, create a supporting room that makes logical sense in context.
 
 REVERSE PROPAGATION (Implications):
-If this room contains a logical dependency (e.g., a Locked Door, a Missing Statue Head, a Cryptic Map), you MUST generate an 'implication'.
-- Example: "Locked Door" -> implies "Key" exists in a DISTANT room.
-- Example: "Altar missing an Idol" -> implies "Golden Idol" exists in a DISTANT room.
+If this room contains a logical dependency, you MUST generate an 'implication'.
+- Logical dependencies imply specific items exist in DISTANT rooms.
+- Missing parts imply their counterparts exist elsewhere.
 
 Determine how many objects this room should contain based on its semantic type (room_type):
 - Entrances, corridors: 0-1 objects
@@ -553,6 +553,29 @@ Provide 'object_count' as an integer, then provide exactly that many 'visible_ob
      */
     getObjectEntity(objectId: string): ObjectEntity | undefined {
         return this.objectEntities.get(objectId);
+    }
+
+    /**
+     * Remove an object from a room (e.g. after looting)
+     */
+    removeObjectFromRoom(roomId: string, objectId: string): void {
+        const room = this.layout?.rooms.get(roomId);
+        if (!room || !room.components.objectSlots) return;
+
+        const index = room.components.objectSlots.findIndex(o => o.entityId === objectId);
+        if (index !== -1) {
+            room.components.objectSlots.splice(index, 1);
+            // Also remove the entity itself
+            this.objectEntities.delete(objectId);
+
+            // Log removal
+            this.eventLog.append({
+                type: 'DeltaApplied',
+                entityId: objectId,
+                description: `Object removed from room ${roomId}`,
+                delta: { removed: true }
+            });
+        }
     }
 
     /**

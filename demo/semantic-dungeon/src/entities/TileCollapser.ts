@@ -54,7 +54,10 @@ export interface InspectionResult {
     isObject: boolean;
     wasAlreadyCollapsed: boolean;
     semanticAction?: 'pickup' | 'unlock' | 'open' | 'other';
-    item?: string;
+    item?: string; // Legacy support
+    items?: string[]; // V2 Semantic Generation
+    outcome?: 'steady' | 'modified' | 'destroyed';
+    generatedItems?: string[];
 }
 
 /**
@@ -190,20 +193,28 @@ export async function interactWithTile(
 
             // TODO: Update ObjectCollapser to return structured data.
             // For now, simple object interaction.
-            const description = await collapseObjectContents(objectHere, action);
+            // V2 Semantic Interaction
+            const result = await collapseObjectContents(objectHere, action);
 
-            // Parse [PICKUP] protocol from LLM
-            let semanticAction: 'pickup' | undefined = undefined;
-            if (description.includes('[PICKUP]')) {
+            let semanticAction: 'pickup' | 'other' | undefined = undefined;
+            const generatedItems = result.generatedItems || [];
+
+            // Protocol: If items generated, we imply pickup behavior
+            if (generatedItems.length > 0) {
                 semanticAction = 'pickup';
-                // Clean the tag from the description shown to user? 
-                // Currently InspectionModal uses the description string directly.
-                // We should probably strip it to look clean.
-                // result.description = description.replace('[PICKUP]', '').trim();
-                // But description passed here is const.
             }
 
-            const cleanDescription = description.replace('[PICKUP]', '').trim();
+            // Handle Destruction
+            if (result.outcome === 'destroyed') {
+                if (room) {
+                    horizonQueue.removeObjectFromRoom(room.id, objectHere.id);
+                    tileDescriptions.delete(`${x},${y}`);
+                }
+            }
+
+            // Note: Modification is handled inside collapseObjectContents (updates components in place)
+
+            const cleanDescription = result.message;
 
             return {
                 success: true,
@@ -213,20 +224,33 @@ export async function interactWithTile(
                 isObject: true,
                 wasAlreadyCollapsed: false,
                 semanticAction: semanticAction,
-                item: objectHere.components.objectType as string
+                item: generatedItems[0], // Legacy compat for single item UI
+                items: generatedItems,
+                outcome: result.outcome,
+                generatedItems: result.generatedItems
             };
         }
     }
 
     // No object - interact with the tile itself (door, wall, floor)
-    const description = await interactWithTileType(layout, x, y, tileType, room, action, inventory);
+    const interaction = await interactWithTileType(layout, x, y, tileType, room, action, inventory);
+
+    const generatedItems = interaction.items || [];
+    let semanticAction: 'pickup' | 'other' | undefined = undefined;
+
+    if (generatedItems.length > 0) {
+        semanticAction = 'pickup';
+    }
 
     return {
         success: true,
         tileType,
-        description,
+        description: interaction.message,
         isObject: false,
-        wasAlreadyCollapsed: false
+        wasAlreadyCollapsed: false,
+        semanticAction,
+        item: generatedItems[0],
+        items: generatedItems
     };
 }
 
@@ -278,7 +302,7 @@ async function collapseTile(
         };
 
         const questObj = room?.constraints.find(c => c.key === 'quest_objective');
-        const questContext = questObj ? `\n\nCRITICAL QUEST: "${questObj.value}"\nEnsure the description reflects this specific quest's theme (e.g. if fire quest, mention scorch marks or heat; if water quest, mention dampness or puddles).` : '';
+        const questContext = questObj ? `\n\nCRITICAL QUEST: "${questObj.value}"\nEnsure the description reflects this specific quest's theme or atmospheric elements.` : '';
 
         let instruction: string;
         switch (tileType) {
@@ -348,6 +372,11 @@ async function collapseTile(
     }
 }
 
+interface TileInteractionResult {
+    message: string;
+    items: string[];
+}
+
 /**
  * Interact with a tile type
  */
@@ -359,7 +388,7 @@ async function interactWithTileType(
     room: RoomEntity | null,
     action: string,
     inventory: string[]
-): Promise<string> {
+): Promise<TileInteractionResult> {
     const roomContext = room ? {
         roomType: room.components.roomType || 'unknown chamber',
         theme: room.components.theme || 'ancient'
@@ -369,10 +398,9 @@ async function interactWithTileType(
     };
 
     // Special handling for Doors
-    // Special handling for Doors: Route ALL interactions to the semantic handler
-    // This allows "kick", "smash", "listen", etc. to be processed by the LLM
     if (tileType === 'door') {
-        return handleDoorInteraction(room, x, y, action, inventory);
+        const msg = await handleDoorInteraction(room, x, y, action, inventory);
+        return { message: msg, items: [] };
     }
 
     try {
@@ -386,13 +414,18 @@ async function interactWithTileType(
                 room: roomContext,
                 instruction: `The player tries to "${action}" this ${tileType}.
 PHYSICS VALIDATION: 
-- You are a generic physics engine.
-- REJECT impossible actions (e.g., "loot wall", "eat floor", "pick up door").
-- If rejected, describe the failure (e.g., "The wall is solid stone and cannot be moved.").
-- If valid, describe the result. 1-2 sentences.`
+- REJECT interactions that violate the physical integrity of the base structure or architecture.
+- ALLOW harvesting surface features IF they are present in the narrative description.
+- ALLOW interacting with fixtures or added details.
+
+Output JSON:
+{
+    "message": "Narrative result (1-2 sentences). Explain failure if rejected.",
+    "items": ["Any", "Items", "Harvested"]
+}`
             },
             constraints: { hard: [], soft: [] },
-            whitelist: { requiredFields: ['result'] }
+            whitelist: { requiredFields: ['message', 'items'] }
         };
 
         const response = await solver.solve(request);
@@ -401,11 +434,14 @@ PHYSICS VALIDATION:
             throw new Error(response.error || 'LLM failed');
         }
 
-        return String(response.proposal.result || 'Nothing happens.');
+        return {
+            message: String(response.proposal.message || 'Nothing happens.'),
+            items: Array.isArray(response.proposal.items) ? response.proposal.items.map(String) : []
+        };
 
     } catch (error) {
         console.error(`[TileCollapser] Interact failed for tile ${x},${y}:`, error);
-        return getInteractFallback(tileType, action);
+        return { message: getInteractFallback(tileType, action), items: [] };
     }
 }
 

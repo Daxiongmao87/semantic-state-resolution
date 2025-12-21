@@ -265,4 +265,12 @@ export interface PlayerState {
     facing: 'north' | 'south' | 'east' | 'west';
     currentRoomId: string | null;
     inventory: string[];
+    equipment: EquipmentSlots;
+}
+
+export interface EquipmentSlots {
+    head: string | null;
+    chest: string | null;
+    mainHand: string | null;
+    offHand: string | null;
 }

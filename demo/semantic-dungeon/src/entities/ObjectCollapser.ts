@@ -5,7 +5,7 @@
 import { getOpenRouterSolver } from '../solver/OpenRouterSolver';
 import { getEventLog } from '../engine/EventLog';
 import type { ObjectEntity } from './ObjectEntity';
-import { getObjectCollapseLevel } from './ObjectEntity';
+
 import type { SolverRequest } from '../types';
 
 const solver = getOpenRouterSolver();
@@ -14,6 +14,14 @@ const eventLog = getEventLog();
 // =============================================================================
 // Collapse Functions
 // =============================================================================
+
+export interface ObjectInteractionResult {
+    message: string;
+    generatedItems: string[];
+    outcome: 'steady' | 'modified' | 'destroyed';
+    newType?: string;
+    newDescription?: string;
+}
 
 /**
  * Collapse object type (called when room collapses)
@@ -47,13 +55,13 @@ export async function collapseObjectType(
 RULES:
 - Be creative and contextual.
 - Avoid generic dungeon clichés.${questContext}
-- Just identify the type of object (e.g., 'cracked magma-shard', 'water-logged chest', 'floating ember').
+- Just identify the type of object based on the room context.
 - Respond with 2-3 tags for initial properties.`;
 
         if (requiredObj) {
             instruction = `CRITICAL OVERRIDE: This object MUST be the key quest item described as: "${requiredObj.value}".
 You must generate this specific item.
-Name it appropriately (e.g. 'Golden Idol', 'Ancient Scroll').
+Name it appropriately.
 Tags should reflect its legendary or key status.`;
             console.log(`[ObjectCollapser] Forcing QUEST TARGET generation: ${requiredObj.value}`);
         }
@@ -156,7 +164,7 @@ export async function collapseObjectVisual(obj: ObjectEntity): Promise<string> {
                 instruction: `Describe what the player sees when looking at a "${objectType}".
 
 RULES:
-- Use SECOND PERSON: "You see...", "Before you lies...", "You notice..."
+- Use SECOND PERSON perspective.
 - Description must be SELF-CONTAINED.
 - Current state: ${currentState}
 - Current properties: ${currentTags.length > 0 ? currentTags.join(', ') : 'none'}
@@ -236,11 +244,9 @@ Write 2-3 sentences describing what the player sees RIGHT NOW.`
 export async function collapseObjectContents(
     obj: ObjectEntity,
     action: string
-): Promise<string> {
-    if (getObjectCollapseLevel(obj) === 'contents') {
-        return obj.components.interactionResult || 'Nothing happens.';
-    }
+): Promise<ObjectInteractionResult> {
 
+    // We force re-evaluation every time to allow sequential interactions (hit twice -> break)
     obj.state = 'collapsing';
 
     eventLog.append({
@@ -253,54 +259,44 @@ export async function collapseObjectContents(
         const existingTags = obj.components.tags || [];
         const existingState = obj.components.interactionState || 'unknown';
 
+        // Detailed semantic prompt
+        const instruction = `
+The player performs action "${action}" on "${objectType}".
+Context: ${obj.components.visualDesc || 'A mysterious object'}.
+State: ${existingState}
+Tags: [${existingTags.join(', ')}].
+
+SIMULATION TASK:
+Analyze the physical and semantic consequences of this action.
+SIMULATION TASK:
+Analyze the physical and semantic consequences of this action.
+1. Does it generate items? (Generate loose items if they are physically present or contained).
+2. Does it change the object? (Mechanically, chemically, or magically alter state).
+3. Be realistic. Extracting a sub-component should leave the remainder.
+
+Output JSON:
+{
+    "message": "Narrative description of what happens (1-2 sentences).",
+    "generated_items": ["List", "of", "items", "created/taken"],
+    "outcome": "steady" (no change) OR "modified" (changed state) OR "destroyed" (removed),
+    "new_type": "Name of the object AFTER modification (if outcome=modified)",
+    "new_description": "Visual description of the object AFTER modification (if outcome=modified)"
+}
+`;
+
         const request: SolverRequest = {
             requestId: `collapse_object_contents_${obj.id}_${Date.now()}`,
             taskType: 'COLLAPSE_OBJECT_CONTENTS',
             entityId: obj.id,
             context: {
                 objectType,
-                visualDesc: obj.components.visualDesc,
-                existingTags,
-                existingState,
                 action,
-                instruction: `The player attempts: "${action}" on a ${objectType}.
-
-RULES:
-- Use SECOND PERSON: "You...", "Your hands...", "You see..."
-- Current object state: ${existingState}
-- Current properties: ${existingTags.join(', ') || 'none'}
-
-Generate:
-1. result: What happens? Describe in second person. (2-3 sentences, e.g., "You strike the crystal and it shatters, sending shards flying. A faint hum fills the air as glowing dust settles around you.")
-2. new_state: Single word/phrase for new state (e.g., "shattered", "opened", "activated")
-3. new_tags: Array of tags for the object's new properties (e.g., ["shattered", "glowing_dust", "sharp_shards"])
-4. contents: If something was revealed/found, list items (array of strings)
-
-PROTOCOL:
-- If the user explicitly tries to take/loot the object AND it makes sense (it's small, portable, and not fixed), prefix the 'result' with [PICKUP].
-- Examples: "[PICKUP] You grab the rusty key.", "The chest is too heavy to lift."
-- VALIDATION: If the action is physically impossible (e.g. eating a sword, safe-cracking with bare hands), describe the Failure and DO NOT emit [PICKUP].
-
-Be creative. Actions have consequences.`
+                instruction
             },
-            constraints: {
-                hard: [
-                    ...obj.constraints,
-                    { key: 'object_type', value: objectType, strength: 1.0, type: 'hard', sourceEventId: 'constraint' },
-                    // Existing tags become constraints
-                    ...existingTags.map(tag => ({
-                        key: `previous_state_${tag}`,
-                        value: true,
-                        strength: 0.8,
-                        type: 'soft' as const,
-                        sourceEventId: 'previous_interaction'
-                    }))
-                ],
-                soft: []
-            },
+            constraints: { hard: [], soft: [] },
             whitelist: {
-                requiredFields: ['result', 'new_state', 'new_tags', 'contents'],
-                objectType
+                requiredFields: ['message', 'generated_items', 'outcome'],
+                explanation: "outcome must be steady, modified, or destroyed."
             }
         };
 
@@ -311,55 +307,45 @@ Be creative. Actions have consequences.`
         }
 
         const proposal = response.proposal;
+        const result: ObjectInteractionResult = {
+            message: String(proposal.message || 'Nothing happens.'),
+            generatedItems: Array.isArray(proposal.generated_items) ? proposal.generated_items.map(String) : [],
+            outcome: (proposal.outcome as 'steady' | 'modified' | 'destroyed') || 'steady',
+            newType: proposal.new_type ? String(proposal.new_type) : undefined,
+            newDescription: proposal.new_description ? String(proposal.new_description) : undefined
+        };
 
-        obj.components.interactionResult = String(proposal.result || 'Nothing happens.');
-        obj.components.interactionState = String(proposal.new_state || proposal.newState || 'changed') as ObjectEntity['components']['interactionState'];
-        obj.components.contents = Array.isArray(proposal.contents)
-            ? proposal.contents.map(String)
-            : [];
+        // Apply Modification Logic
+        if (result.outcome === 'modified') {
+            if (result.newType) obj.components.objectType = result.newType;
+            if (result.newDescription) obj.components.visualDesc = result.newDescription;
+            obj.components.interactionState = 'active';
+        }
 
-        // Merge new tags with existing (these become constraints for future interactions)
-        const newTags = Array.isArray(proposal.new_tags)
-            ? proposal.new_tags.map(String)
-            : [];
-        obj.components.tags = [...new Set([...obj.components.tags, ...newTags])];
-
-        // Invalidate visual description - next inspection will regenerate based on new state
-        // This ensures "inspect after tip" shows "tilted chest" not "upright chest"
-        obj.components.visualDesc = undefined;
-
-        // Don't mark as fully collapsed - object can be interacted with again
-        obj.state = 'latent';
+        obj.state = 'collapsed';
+        obj.collapsedAt = Date.now();
 
         eventLog.append({
             type: 'CollapseCommitted',
             entityId: obj.id,
             components: {
-                interactionResult: obj.components.interactionResult,
-                interactionState: obj.components.interactionState,
-                contents: obj.components.contents,
-                newTags
+                interactionResult: result.message,
+                outcome: result.outcome,
+                generatedItems: result.generatedItems
             },
             tags: obj.components.tags
         });
 
-        return obj.components.interactionResult;
+        return result;
 
     } catch (error) {
         console.error(`[ObjectCollapser] Contents collapse failed for ${obj.id}:`, error);
 
-        obj.components.interactionResult = 'Nothing happens.';
-        obj.components.contents = [];
         obj.state = 'collapsed';
-        obj.collapsedAt = Date.now();
-
-        eventLog.append({
-            type: 'CollapseFailed',
-            entityId: obj.id,
-            reason: error instanceof Error ? error.message : String(error),
-            fallbackUsed: true
-        });
-
-        return obj.components.interactionResult;
+        return {
+            message: 'Nothing happens.',
+            generatedItems: [],
+            outcome: 'steady'
+        };
     }
 }
