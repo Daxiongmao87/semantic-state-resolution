@@ -4,6 +4,7 @@
  */
 
 import type { SolverRequest, SolverResponse } from '../types';
+import { validateSolverProposal } from './Validator';
 
 export interface OpenRouterSolverConfig {
     baseUrl: string;
@@ -39,7 +40,23 @@ export class OpenRouterSolver {
                 const response = await this.callOpenRouter(prompt);
                 const parsed = this.parseResponse(request.requestId, response);
 
-                if (parsed.success) {
+                if (parsed.success && parsed.proposal) {
+                    // V5 Fix: Validate against whitelist before returning
+                    const validation = validateSolverProposal(
+                        parsed.proposal as Record<string, unknown>,
+                        request.whitelist as Record<string, unknown>
+                    );
+
+                    if (validation.warnings.length > 0) {
+                        console.warn(`[OpenRouterSolver] Whitelist warnings:`, validation.warnings);
+                    }
+
+                    if (!validation.valid) {
+                        console.warn(`[OpenRouterSolver] Whitelist validation failed:`, validation.errors);
+                        lastError = new Error(`Whitelist violation: ${validation.errors.join(', ')}`);
+                        continue; // Try again
+                    }
+
                     return parsed;
                 }
 

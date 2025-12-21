@@ -8,6 +8,7 @@ import type { DungeonLayout, RoomEntity } from '../dungeon/DungeonGenerator';
 import type { SolverRequest, Constraint } from '../types';
 import { createObjectEntity, resetObjectIdCounter, type ObjectEntity } from '../entities/ObjectEntity';
 import { collapseObjectType } from '../entities/ObjectCollapser';
+import { getFallbackRoomResult } from './FallbackTable';
 
 // =============================================================================
 // Types
@@ -523,19 +524,18 @@ Generate visible_object_names as a list of Title Case strings (max 3 words). NO 
 
     /**
      * Fallback for when LLM fails
+     * V7 Fix: Uses hash-indexed deterministic selection per §4.3.1
      */
     private getFallbackResult(room: RoomEntity): RoomCollapseResult {
-        const isEntrance = room.components.isEntrance;
+        const hardConstraints = room.constraints.filter(c => c.type === 'hard');
+        const result = getFallbackRoomResult(
+            room.id,
+            hardConstraints,
+            room.components.objectSlots.length,
+            room.components.isEntrance
+        );
 
-        return {
-            roomType: isEntrance ? 'entrance_hall' : 'chamber',
-            theme: 'ancient',
-            description: isEntrance
-                ? 'The entrance to the dungeon, light filtering in from outside.'
-                : 'A dusty chamber with crumbling walls.',
-            tags: isEntrance ? ['entrance', 'threshold'] : ['empty'],
-            objectTypes: []
-        };
+        return result;
     }
 
     /**

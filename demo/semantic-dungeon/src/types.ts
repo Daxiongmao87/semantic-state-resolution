@@ -43,6 +43,8 @@ export type SWFCEvent =
     | CollapseCommittedEvent
     | CollapseFailedEvent
     | ConstraintInjectedEvent
+    | ConstraintObsoletedEvent
+    | ConstraintContradictedEvent
     | DeltaAppliedEvent
     | PlayerMovedEvent;
 
@@ -85,6 +87,34 @@ export interface ConstraintInjectedEvent {
     timestamp: number;
     targetEntityId: string;
     constraint: Constraint;
+}
+
+/**
+ * V13 Fix: Event emitted when a constraint is marked obsolete
+ * Per §4.2 Pruning Policy
+ */
+export interface ConstraintObsoletedEvent {
+    type: 'ConstraintObsoleted';
+    eventId: string;
+    timestamp: number;
+    constraintKey: string;
+    targetEntityId: string;
+    reason: 'canonical_conflict' | 'ttl_expired' | 'strength_decay' | 'manual';
+    sourceEventId?: string; // Original constraint injection event
+}
+
+/**
+ * V13 Fix: Event emitted when two constraints contradict each other
+ * Per §4.2 Pruning Policy
+ */
+export interface ConstraintContradictedEvent {
+    type: 'ConstraintContradicted';
+    eventId: string;
+    timestamp: number;
+    constraintKey: string;
+    targetEntityId: string;
+    conflictingConstraints: [string, string]; // Two constraint source event IDs
+    resolution: 'kept_first' | 'kept_second' | 'both_obsoleted';
 }
 
 export interface DeltaAppliedEvent {
