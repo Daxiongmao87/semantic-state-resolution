@@ -392,7 +392,7 @@ function renderSuggestions(): void {
 }
 
 /**
- * Select a suggestion and fill the input
+ * Select a suggestion and auto-submit
  */
 function selectSuggestion(btn: HTMLElement): void {
     const inputEl = document.getElementById('modal-action-input') as HTMLInputElement;
@@ -400,7 +400,8 @@ function selectSuggestion(btn: HTMLElement): void {
         // Remove the kbd-hint text from the button content
         const text = btn.textContent?.replace(/^[1-3]/, '').trim() || '';
         inputEl.value = text;
-        inputEl.focus();
+        // Auto-submit
+        handleInteract();
     }
 }
 
@@ -424,7 +425,8 @@ function handleModalKeyboard(e: KeyboardEvent): void {
             e.preventDefault();
             if (inputEl) {
                 inputEl.value = state.suggestions[num - 1];
-                inputEl.focus();
+                // Auto-submit
+                handleInteract();
             }
         }
     }

@@ -84,7 +84,8 @@ function ensureModalExists(): void {
             const textarea = document.getElementById('quest-input') as HTMLTextAreaElement;
             if (textarea) {
                 textarea.value = suggestions[num - 1];
-                textarea.focus();
+                // Auto-submit
+                handleSubmit();
             }
         }
     });
@@ -215,6 +216,7 @@ function selectQuestSuggestion(btn: HTMLElement): void {
     if (textarea) {
         const text = btn.textContent?.replace(/^[1-3]/, '').trim() || '';
         textarea.value = text;
-        textarea.focus();
+        // Auto-submit
+        handleSubmit();
     }
 }
