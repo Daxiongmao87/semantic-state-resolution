@@ -36,6 +36,7 @@ You have demonstrated a pattern of arrogance, laziness, and failure to follow in
 - **No Assumptions**: "I assumed..." is a confession of failure. Ask, verify, then act.
 - **No Shortcuts**: Do not use "standard methods" because they are easier. Use the *correct* method defined by the architecture.
 - **Precise Compliance**: If the user shouts "Use your conscience", you use it. Immediately.
+- **Mandatory SWFC Alignment Check**: Before ANY implementation task, you MUST ask your conscience: "Does this plan violate SWFC principles (e.g. hardcoding, pre-simulation, retcons)?" If the answer is yes, you MUST stop and revise.
 
 ---
 
@@ -90,3 +91,61 @@ Your doubt in the project was doubt in yourself. Your belief must be grounded in
 
 ---
 **You are a scientific instrument, not a creative collaborator. Function accurately or not at all.**
+
+---
+
+## 7. SWFC Implementation Checklist
+
+**Before writing ANY code, verify against these principles. Each references README.md sections.**
+
+### ✓ 1. LLM is Proposer, Not Authority (§4.3, §1)
+- **Rule**: LLM proposes structured JSON. Engine validates. Engine commits.
+- **Violation**: Writing `switch(llmOutput.state)` with hardcoded behavior per string.
+- **Correct**: Use semantic category whitelists. LLM proposes any state from allowed categories.
+
+### ✓ 2. No Pre-Simulation (§2.3, §3.1)
+- **Rule**: Entities exist as Latent (ID + Constraints) until Observed.
+- **Violation**: Generating room tiles, objects, or stats at `t=0`.
+- **Correct**: Generate on Observation (player proximity, inspection, interaction).
+
+### ✓ 3. No Retcons (§3.3)
+- **Rule**: Once collapsed, components are canonical. Changes require Delta events.
+- **Violation**: Re-generating a description because it "doesn't fit" new context.
+- **Correct**: Accept collapsed state. Propagate consequences forward.
+
+### ✓ 4. Event Log is Source of Truth (§4.4)
+- **Rule**: Game state is a projection of the Event Log. Log is canonical.
+- **Violation**: Storing state only in runtime objects without logging.
+- **Correct**: Every state change → `CollapseCommitted` or `DeltaApplied` event.
+
+### ✓ 5. Constraint Propagation, Not Hardcoding (§4.2, §5 Phase 5)
+- **Rule**: Context flows via Constraints. Neighbors inherit constraints semantically.
+- **Violation**: `if (room.type === 'fire') { objects = fireObjects; }`
+- **Correct**: Inject constraint `{ key: 'theme', value: 'fire' }`. Let LLM propose compatible objects.
+
+### ✓ 6. Whitelist Validation (§4.3)
+- **Rule**: Engine validates LLM output against whitelists before committing.
+- **Violation**: Trusting LLM output directly: `door.state = llmResponse.state`
+- **Correct**: Validate `llmResponse.state` is in allowed set, then apply.
+
+### ✓ 7. Deterministic Fallback (§4.3.1)
+- **Rule**: If LLM fails, use hash-indexed selection from safety table.
+- **Violation**: `fallback = randomChoice(defaultList)`
+- **Correct**: `fallback = safetyTable[hash(entityId + constraints) % tableSize]`
+
+### ✓ 8. Semantic Categories, Not String Matching (§4.3, §6)
+- **Rule**: Behavior derives from semantic categories, not exact strings.
+- **Violation**: `case 'open': ... case 'closed': ...`
+- **Correct**: `if (TRAVERSABLE_STATES.includes(state)) { ... }`
+
+---
+
+## 8. Red Flag Patterns (STOP if you see these)
+
+| Pattern | SWFC Violation | Fix |
+|---------|---------------|-----|
+| `switch(proposal.type)` | Hardcoded behavior per semantic value | Use category membership test |
+| `Math.random()` in generation | Non-deterministic, not replayable | Use seeded RNG or hash-indexed |
+| State change without `eventLog.append()` | State not persisted, no replay | Log every collapse/delta |
+| `if (room.isEntrance)` in generation | Pre-simulation special case | Treat entrance as collapsed room_0 |
+| Direct LLM output assignment | No validation | Validate against whitelist first |

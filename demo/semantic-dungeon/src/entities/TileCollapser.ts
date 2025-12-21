@@ -421,11 +421,6 @@ async function handleDoorInteraction(
     const door = room.components.doors.find(d => d.position.x === x && d.position.y === y);
     if (!door) return "The door is jammed.";
 
-    // If already open
-    if (door.state === 'open') {
-        return "The door is already open.";
-    }
-
     // Lazy Collapse: Determine if Locked or Unlocked
     eventLog.append({
         type: 'CollapseStarted',
@@ -452,6 +447,7 @@ SIMULATION TASK:
 2. Determine the RESULTING State.
    - Passive (look, check) -> State remains '${door.state}'.
    - Manipulation (open) -> If 'closed', changing to 'open' (80%) or 'locked' (20%).
+   - Closing (close) -> If 'open', change to 'closed'.
    - Destruction (kick) -> If successful, 'broken' (treat as open). If fail, 'closed'.
    - Locking (lock) -> If key possessed, 'locked'.
 
