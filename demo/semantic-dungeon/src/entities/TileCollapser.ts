@@ -52,6 +52,8 @@ export interface InspectionResult {
     objectType?: string;
     isObject: boolean;
     wasAlreadyCollapsed: boolean;
+    semanticAction?: 'pickup' | 'unlock' | 'open' | 'other';
+    item?: string;
 }
 
 /**
@@ -177,15 +179,39 @@ export async function interactWithTile(
 
         if (objectHere) {
             // Collapse object contents
+            // Wait - we need to know if the interaction resulted in a pickup
+            // But collapseObjectContents only returns a string?
+            // We should modify collapseObjectContents logic or parse the string?
+            // BETTER: Use interactionState or specific logic.
+            // For now, let's assume collapseObjectContents handles desc.
+            // We need to inject Semantic Logic here.
+
+            // TODO: Update ObjectCollapser to return structured data.
+            // For now, simple object interaction.
             const description = await collapseObjectContents(objectHere, action);
+
+            // Parse [PICKUP] protocol from LLM
+            let semanticAction: 'pickup' | undefined = undefined;
+            if (description.includes('[PICKUP]')) {
+                semanticAction = 'pickup';
+                // Clean the tag from the description shown to user? 
+                // Currently InspectionModal uses the description string directly.
+                // We should probably strip it to look clean.
+                // result.description = description.replace('[PICKUP]', '').trim();
+                // But description passed here is const.
+            }
+
+            const cleanDescription = description.replace('[PICKUP]', '').trim();
 
             return {
                 success: true,
                 tileType,
-                description,
-                objectType: objectHere.components.objectType,
+                description: cleanDescription,
+                objectType: objectHere.components.objectType as string,
                 isObject: true,
-                wasAlreadyCollapsed: false
+                wasAlreadyCollapsed: false,
+                semanticAction: semanticAction,
+                item: objectHere.components.objectType as string
             };
         }
     }
@@ -340,7 +366,9 @@ async function interactWithTileType(
     };
 
     // Special handling for Doors
-    if (tileType === 'door' && (action.toLowerCase().includes('open') || action.toLowerCase().includes('unlock'))) {
+    // Special handling for Doors: Route ALL interactions to the semantic handler
+    // This allows "kick", "smash", "listen", etc. to be processed by the LLM
+    if (tileType === 'door') {
         return handleDoorInteraction(room, x, y, action);
     }
 
@@ -353,7 +381,12 @@ async function interactWithTileType(
                 tileType,
                 action,
                 room: roomContext,
-                instruction: `The player tries to "${action}" this ${tileType}. What happens? If the action makes sense, describe the result. If it doesn't make sense, describe why it fails or what happens instead. 1-2 sentences.`
+                instruction: `The player tries to "${action}" this ${tileType}.
+PHYSICS VALIDATION: 
+- You are a generic physics engine.
+- REJECT impossible actions (e.g., "loot wall", "eat floor", "pick up door").
+- If rejected, describe the failure (e.g., "The wall is solid stone and cannot be moved.").
+- If valid, describe the result. 1-2 sentences.`
             },
             constraints: { hard: [], soft: [] },
             whitelist: { requiredFields: ['result'] }
@@ -408,52 +441,67 @@ async function handleDoorInteraction(
                 roomType: room.components.roomType,
                 theme: room.components.theme,
                 action,
-                instruction: `Player attempts to OPEN a door in ${room.components.roomType}.
-DECIDE: Is it Locked or Unlocked?
-PROBABILITY: 80% Unlocked, 20% Locked.
-- Unlocked: Creating flow is good. Just describe the door opening (creaking, sliding).
-- Locked: ONLY if this leads to a critical area (e.g. armory, treasury). Requires a key.
-- The decision should fit the theme (${room.components.theme}).`
+                doorState: door.state,
+                instruction: `Entity: Door (State: ${door.state})
+Context: ${room.components.roomType} (${room.components.theme}).
+User Action: "${action}"
+
+SIMULATION TASK:
+1. Analyze the Action + Current State. 
+2. Determine the RESULTING State.
+   - Passive (look, check) -> State remains '${door.state}'.
+   - Manipulation (open) -> If 'closed', changing to 'open' (80%) or 'locked' (20%).
+   - Destruction (kick) -> If successful, 'broken' (treat as open). If fail, 'closed'.
+   - Locking (lock) -> If key possessed, 'locked'.
+
+PHYSICS/THEME VALIDATION:
+- "Looting" a door is impossible -> State remains '${door.state}'. Describe failure.
+- "Locked" state implies a specific key is needed.`
             },
             constraints: { hard: [], soft: [] },
             whitelist: {
-                requiredFields: ['state', 'key_name', 'message'],
-                explanation: "state must be 'locked' or 'unlocked'. key_name is required if locked. message is the description."
+                requiredFields: ['new_state', 'key_name', 'message'],
+                explanation: "new_state must be 'locked', 'open', 'closed', or 'broken'. key_name required if locked. message is description."
             }
         };
 
         const response = await solver.solve(request);
         if (!response.success || !response.proposal) throw new Error("LLM failed decision");
 
-        const state = String(response.proposal.state).toLowerCase();
+        const newState = String(response.proposal.new_state).toLowerCase();
         const message = String(response.proposal.message);
         const keyName = String(response.proposal.key_name || 'Key');
 
-        if (state === 'locked') {
-            door.state = 'locked';
+        // Apply Semantic State Change
+        switch (newState) {
+            case 'locked':
+                door.state = 'locked';
+                // Reverse Propagation
+                getRoomHorizonQueue().injectReversePropagationConstraint(room.id, 'required_object', keyName);
 
-            // REVERSE PROPAGATION: Inject the Key elsewhere
-            getRoomHorizonQueue().injectReversePropagationConstraint(room.id, 'required_object', keyName);
+                eventLog.append({
+                    type: 'CollapseCommitted',
+                    entityId: `door_${x}_${y}`,
+                    components: { state: 'locked', requiredKey: keyName },
+                    tags: ['locked']
+                });
+                return message + ` (Requires: ${keyName})`;
 
-            eventLog.append({
-                type: 'CollapseCommitted',
-                entityId: `door_${x}_${y}`,
-                components: { state: 'locked', requiredKey: keyName },
-                tags: ['locked']
-            });
+            case 'open':
+            case 'broken': // Treated as open for traversal
+                door.state = 'open';
+                eventLog.append({
+                    type: 'CollapseCommitted',
+                    entityId: `door_${x}_${y}`,
+                    components: { state: 'open' },
+                    tags: ['open']
+                });
+                return message;
 
-            return message + ` (Requires: ${keyName})`;
-        } else {
-            door.state = 'open';
-
-            eventLog.append({
-                type: 'CollapseCommitted',
-                entityId: `door_${x}_${y}`,
-                components: { state: 'open' },
-                tags: ['open']
-            });
-
-            return message;
+            case 'closed':
+            default:
+                // State remains unchanged
+                return message;
         }
 
     } catch (e) {

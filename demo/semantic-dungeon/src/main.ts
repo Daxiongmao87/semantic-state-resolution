@@ -6,7 +6,8 @@
 import { getOpenRouterSolver } from './solver/OpenRouterSolver';
 import { ClassGeneratorUI } from './ui/ClassGeneratorUI';
 import { DungeonGenerator, type DungeonLayout } from './dungeon/DungeonGenerator';
-import { DungeonRenderer, type PlayerState } from './renderer/DungeonRenderer';
+import { DungeonRenderer } from './renderer/DungeonRenderer';
+import type { PlayerState } from './types';
 import { PlayerController } from './player/PlayerController';
 import { getRoomHorizonQueue } from './engine/RoomHorizonQueue';
 import { getEventLog } from './engine/EventLog';
@@ -329,11 +330,20 @@ async function handleInspection(x: number, y: number): Promise<void> {
     playerController?.setInputEnabled(false);
 
     // Open the inspection modal
-    await openInspectionModal(dungeonLayout, x, y, () => {
-        // Re-enable input when modal closes
-        playerController?.setInputEnabled(true);
-        updateDungeonEvents();
-    });
+    await openInspectionModal(
+        dungeonLayout,
+        x,
+        y,
+        () => {
+            // Re-enable input when modal closes
+            playerController?.setInputEnabled(true);
+            updateDungeonEvents();
+        },
+        (item: string) => {
+            // Handle inventory add
+            playerController?.addToInventory(item);
+        }
+    );
 }
 
 init().catch(error => {

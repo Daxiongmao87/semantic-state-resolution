@@ -3,6 +3,7 @@
  */
 
 import type { DungeonLayout } from '../dungeon/DungeonGenerator';
+import type { PlayerState } from '../types';
 
 export interface RendererConfig {
     tileSize: number;
@@ -32,12 +33,7 @@ const DEFAULT_CONFIG: RendererConfig = {
     }
 };
 
-export interface PlayerState {
-    x: number;
-    y: number;
-    facing: 'north' | 'south' | 'east' | 'west';
-    currentRoomId: string | null;
-}
+
 
 export class DungeonRenderer {
     private canvas: HTMLCanvasElement;

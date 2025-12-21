@@ -276,6 +276,11 @@ Generate:
 3. new_tags: Array of tags for the object's new properties (e.g., ["shattered", "glowing_dust", "sharp_shards"])
 4. contents: If something was revealed/found, list items (array of strings)
 
+PROTOCOL:
+- If the user explicitly tries to take/loot the object AND it makes sense (it's small, portable, and not fixed), prefix the 'result' with [PICKUP].
+- Examples: "[PICKUP] You grab the rusty key.", "The chest is too heavy to lift."
+- VALIDATION: If the action is physically impossible (e.g. eating a sword, safe-cracking with bare hands), describe the Failure and DO NOT emit [PICKUP].
+
 Be creative. Actions have consequences.`
             },
             constraints: {

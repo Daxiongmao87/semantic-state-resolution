@@ -224,3 +224,15 @@ export const ABILITY_STAT_TYPES = [
 ] as const;
 
 export type AbilityCategory = typeof ABILITY_CATEGORIES[number];
+
+// =============================================================================
+// Game State Types
+// =============================================================================
+
+export interface PlayerState {
+    x: number;
+    y: number;
+    facing: 'north' | 'south' | 'east' | 'west';
+    currentRoomId: string | null;
+    inventory: string[];
+}

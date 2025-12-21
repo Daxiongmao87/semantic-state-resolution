@@ -3,7 +3,7 @@
  */
 
 import type { DungeonLayout } from '../dungeon/DungeonGenerator';
-import type { PlayerState } from '../renderer/DungeonRenderer';
+import type { PlayerState } from '../types';
 import { getEventLog } from '../engine/EventLog';
 
 export type Direction = 'north' | 'south' | 'east' | 'west';
@@ -38,7 +38,8 @@ export class PlayerController {
             x: pos.x + Math.floor(dim.width / 2),
             y: pos.y + Math.floor(dim.height / 2),
             facing: 'south',
-            currentRoomId: layout.entranceRoomId
+            currentRoomId: layout.entranceRoomId,
+            inventory: []
         };
 
         // Log initial position
@@ -60,6 +61,23 @@ export class PlayerController {
      */
     getPlayer(): PlayerState {
         return { ...this.player };
+    }
+
+    /**
+     * Add item to inventory
+     */
+    addToInventory(item: string) {
+        this.player.inventory.push(item);
+        this.eventLog.append({
+            type: 'DeltaApplied',
+            eventId: `inv_add_${Date.now()}`,
+            timestamp: Date.now(),
+            entityId: 'player',
+            op: 'add',
+            path: 'inventory',
+            value: item
+        });
+        console.log(`[Player] Added to inventory: ${item}`);
     }
 
     /**

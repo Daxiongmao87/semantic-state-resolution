@@ -35,6 +35,7 @@ const state: ModalState = {
 
 let modalElement: HTMLElement | null = null;
 let onCloseCallback: (() => void) | null = null;
+let onInventoryAddCallback: ((item: string) => void) | null = null;
 
 // =============================================================================
 // Modal API
@@ -47,7 +48,8 @@ export async function openInspectionModal(
     layout: DungeonLayout,
     x: number,
     y: number,
-    onClose?: () => void
+    onClose?: () => void,
+    onInventoryAdd?: (item: string) => void
 ): Promise<void> {
     state.layout = layout;
     state.x = x;
@@ -56,6 +58,7 @@ export async function openInspectionModal(
     state.isOpen = true;
     state.history = [];
     onCloseCallback = onClose || null;
+    onInventoryAddCallback = onInventoryAdd || null;
 
     // Create and show modal
     ensureModalExists();
@@ -252,6 +255,16 @@ async function handleInteract(): Promise<void> {
         // Update state with result
         state.currentDescription = result.description;
         state.isLoading = false;
+
+        // Handle Semantic Actions (Loot)
+        if (result.semanticAction === 'pickup' && result.item && onInventoryAddCallback) {
+            onInventoryAddCallback(result.item);
+            state.history.push(`> You picked up: ${result.item}`);
+            state.currentDescription += `\n(Added to Inventory: ${result.item})`;
+
+            // Should we close the modal? Or remove the object from view?
+            // Ideally we'd remove the object from the dungeon data, but for now just visual feedback.
+        }
 
         // Clear input
         if (inputEl) inputEl.value = '';
