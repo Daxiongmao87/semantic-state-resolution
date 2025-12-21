@@ -1,13 +1,13 @@
 /**
- * Event Log - Append-only event store for SWFC
+ * Event Log - Append-only event store for SSR
  * Implements §4.4 Event Sourcing
  */
 
-import type { SWFCEvent } from '../types';
+import type { SSREvent } from '../types';
 
 export class EventLog {
-    private events: SWFCEvent[] = [];
-    private listeners: Set<(event: SWFCEvent) => void> = new Set();
+    private events: SSREvent[] = [];
+    private listeners: Set<(event: SSREvent) => void> = new Set();
 
     /**
      * Generate a unique event ID
@@ -20,13 +20,13 @@ export class EventLog {
      * Append an event to the log
      */
     append(
-        eventData: { type: SWFCEvent['type'] } & Record<string, unknown>
-    ): SWFCEvent {
+        eventData: { type: SSREvent['type'] } & Record<string, unknown>
+    ): SSREvent {
         const event = {
             ...eventData,
             eventId: this.generateEventId(),
             timestamp: Date.now()
-        } as SWFCEvent;
+        } as SSREvent;
 
         this.events.push(event);
 
@@ -45,14 +45,14 @@ export class EventLog {
     /**
      * Get all events
      */
-    getAll(): readonly SWFCEvent[] {
+    getAll(): readonly SSREvent[] {
         return this.events;
     }
 
     /**
      * Get events for a specific entity
      */
-    getForEntity(entityId: string): SWFCEvent[] {
+    getForEntity(entityId: string): SSREvent[] {
         return this.events.filter(event => {
             if ('entityId' in event) return event.entityId === entityId;
             if ('targetEntityId' in event) return event.targetEntityId === entityId;
@@ -63,21 +63,21 @@ export class EventLog {
     /**
      * Get events by type
      */
-    getByType<T extends SWFCEvent['type']>(type: T): Extract<SWFCEvent, { type: T }>[] {
-        return this.events.filter(event => event.type === type) as Extract<SWFCEvent, { type: T }>[];
+    getByType<T extends SSREvent['type']>(type: T): Extract<SSREvent, { type: T }>[] {
+        return this.events.filter(event => event.type === type) as Extract<SSREvent, { type: T }>[];
     }
 
     /**
      * Get the last N events
      */
-    tail(n: number): SWFCEvent[] {
+    tail(n: number): SSREvent[] {
         return this.events.slice(-n);
     }
 
     /**
      * Subscribe to new events
      */
-    subscribe(listener: (event: SWFCEvent) => void): () => void {
+    subscribe(listener: (event: SSREvent) => void): () => void {
         this.listeners.add(listener);
         return () => this.listeners.delete(listener);
     }
@@ -107,7 +107,7 @@ export class EventLog {
      * Import events from JSON (for replay)
      */
     import(json: string): void {
-        const imported = JSON.parse(json) as SWFCEvent[];
+        const imported = JSON.parse(json) as SSREvent[];
         this.events = imported;
     }
 }

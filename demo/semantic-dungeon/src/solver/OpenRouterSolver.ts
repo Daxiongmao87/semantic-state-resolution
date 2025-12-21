@@ -109,8 +109,8 @@ export class OpenRouterSolver {
             headers: {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${this.config.apiKey}`,
-                'HTTP-Referer': 'https://swfc-demo.local',
-                'X-Title': 'SWFC Demo'
+                'HTTP-Referer': 'https://SSR-demo.local',
+                'X-Title': 'SSR Demo'
             },
             body: JSON.stringify({
                 model: this.config.model,

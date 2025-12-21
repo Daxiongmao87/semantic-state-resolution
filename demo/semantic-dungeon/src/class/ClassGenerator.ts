@@ -1,5 +1,5 @@
 /**
- * Class Generator - Fractal SWFC for character class creation
+ * Class Generator - Fractal SSR for character class creation
  * Implements Phase 1: Class name selection, ability pool generation, level progression
  */
 

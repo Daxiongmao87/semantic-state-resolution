@@ -1,14 +1,14 @@
-# SWFC Demo Specification
+# SSR Demo Specification
 
-> **Purpose**: Proof-of-concept demonstrating Semantic Wave Function Collapse where an LLM acts as a Semantic Constraint Solver for Just-In-Time procedural generation.
+> **Purpose**: Proof-of-concept demonstrating Semantic State Resolution where an LLM acts as a Semantic Constraint Solver for Just-In-Time procedural generation.
 
 ---
 
 ## 1. Demo Overview
 
-The demo proves SWFC's core thesis through two systems:
+The demo proves SSR's core thesis through two systems:
 
-| System | SWFC Principle |
+| System | SSR Principle |
 |--------|----------------|
 | **Dungeon Generation** | Rooms/objects exist as Latent Entities until observed. LLM proposes themes based on quest + neighbor constraints. |
 | **Character Class Generation** | Fractal Collapse — description → class name → abilities → properties. Each level inherits constraints from parent. |
@@ -237,7 +237,7 @@ const MONSTER_TYPES = [
 
 ---
 
-## 6. Character Class Generation (Fractal SWFC)
+## 6. Character Class Generation (Fractal SSR)
 
 ### 6.1 Flow
 
@@ -513,7 +513,7 @@ All state changes are recorded as events (Event Sourcing):
 ### 10.1 Event Types
 
 ```typescript
-type SWFCEvent =
+type SSREvent =
   | { type: 'EntityCreated'; entityId: string; initialConstraints: Constraint[] }
   | { type: 'CollapseStarted'; entityId: string; timestamp: number }
   | { type: 'CollapseCommitted'; entityId: string; components: Record<string, unknown>; tags: string[] }

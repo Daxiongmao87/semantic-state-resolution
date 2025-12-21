@@ -10,6 +10,7 @@ import type { SolverRequest } from '../types';
 import { getRoomHorizonQueue } from '../engine/RoomHorizonQueue';
 import { collapseObjectVisual, collapseObjectContents } from './ObjectCollapser';
 import { getFallbackTileDescription } from '../engine/FallbackTable';
+import { SimulatedInteraction, buildInteractionResult } from '../utils/interactionUtils';
 
 const solver = getOpenRouterSolver();
 const eventLog = getEventLog();
@@ -193,7 +194,6 @@ export async function interactWithTile(
     const room = findRoomContainingTile(layout, x, y);
 
     // Arbitration Phase
-    // Arbitration Phase
     let arbitrationContext = "";
     let arbitrationOutcome = "success"; // default
     let mechanicsLog: MechanicsLog | undefined = undefined;
@@ -272,13 +272,6 @@ export async function interactWithTile(
             // V2 Semantic Interaction
             const result = await collapseObjectContents(objectHere, augmentedAction);
 
-            let semanticAction: 'pickup' | 'other' | undefined = undefined;
-            const generatedItems = result.generatedItems || [];
-
-            if (generatedItems.length > 0) {
-                semanticAction = 'pickup';
-            }
-
             if (result.outcome === 'destroyed') {
                 if (room) {
                     horizonQueue.removeObjectFromRoom(room.id, objectHere.id);
@@ -286,20 +279,21 @@ export async function interactWithTile(
                 }
             }
 
-            return {
-                success: true,
-                tileType,
-                description: result.message,
-                objectType: objectHere.components.objectType as string,
-                isObject: true,
-                wasAlreadyCollapsed: false,
-                semanticAction: semanticAction,
-                item: generatedItems[0],
-                items: generatedItems,
+            // UNIFIED PATH: Use result builder
+            const simulation: SimulatedInteraction = {
+                message: result.message,
+                items: result.generatedItems || [],
                 outcome: result.outcome,
-                generatedItems: result.generatedItems,
-                mechanics: mechanicsLog // Added
+                mechanics: mechanicsLog
+                // semanticAction inferred in builder if items present
             };
+
+            return buildInteractionResult(simulation, {
+                tileType,
+                isObject: true,
+                objectType: objectHere.components.objectType as string,
+                wasAlreadyCollapsed: false
+            });
         }
     }
 
@@ -307,23 +301,19 @@ export async function interactWithTile(
     // Pass original inventory, original action
     const interaction = await interactWithTileType(layout, x, y, tileType, room, action, inventory);
 
-    const generatedItems = interaction.items || [];
-    let semanticAction: 'pickup' | 'other' | undefined = undefined;
-
-    if (generatedItems.length > 0) {
-        semanticAction = 'pickup';
-    }
-
-    return {
-        success: true,
-        tileType,
-        description: interaction.message, // Raw message
-        isObject: false,
-        wasAlreadyCollapsed: false,
-        semanticAction,
-        item: generatedItems[0],
-        items: generatedItems
+    // UNIFIED PATH: Use result builder
+    const simulation: SimulatedInteraction = {
+        message: interaction.message,
+        items: interaction.items || [],
+        outcome: 'steady', // Tiles rarely change state yet, except doors which handle themselves
+        mechanics: mechanicsLog
     };
+
+    return buildInteractionResult(simulation, {
+        tileType,
+        isObject: false,
+        wasAlreadyCollapsed: false
+    });
 }
 
 // =============================================================================
@@ -582,7 +572,7 @@ PHYSICS/THEME VALIDATION:
         const message = String(response.proposal.message);
         const keyName = String(response.proposal.key_name || 'Key');
 
-        // SWFC: Semantic state categories - not hardcoded behavior, but semantic groupings
+        // SSR: Semantic state categories - not hardcoded behavior, but semantic groupings
         // The LLM proposes a state, we categorize it for game mechanics
         const TRAVERSABLE_STATES = ['open', 'broken', 'ajar', 'smashed', 'destroyed', 'unlocked'];
         const BLOCKED_STATES = ['closed', 'shut', 'sealed'];
@@ -591,7 +581,7 @@ PHYSICS/THEME VALIDATION:
         // Validate against semantic whitelist
         const allValidStates = [...TRAVERSABLE_STATES, ...BLOCKED_STATES, ...LOCKED_STATES];
         if (!allValidStates.includes(newState)) {
-            console.warn(`[SWFC] LLM proposed unknown door state: "${newState}", defaulting to current`);
+            console.warn(`[SSR] LLM proposed unknown door state: "${newState}", defaulting to current`);
             return message;
         }
 
@@ -605,7 +595,7 @@ PHYSICS/THEME VALIDATION:
 
             // Hard Constraint: Cannot lock without key
             if (!hasKey) {
-                console.warn(`[SWFC] Rejected 'locked' state - Player missing key: ${keyName}`);
+                console.warn(`[SSR] Rejected 'locked' state - Player missing key: ${keyName}`);
                 return `You attempt to lock the door, but you realize you don't have the ${keyName}.`;
             }
 

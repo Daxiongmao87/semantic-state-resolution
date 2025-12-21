@@ -1,6 +1,6 @@
-# SWFC Demo Implementation Plan
+# SSR Demo Implementation Plan
 
-> **Strategy**: Prove SWFC incrementally. Start with **Class Generation** (simpler, isolated system) to validate the LLM solver pipeline, then expand to **Dungeon Generation** (complex, interconnected system).
+> **Strategy**: Prove SSR incrementally. Start with **Class Generation** (simpler, isolated system) to validate the LLM solver pipeline, then expand to **Dungeon Generation** (complex, interconnected system).
 
 ---
 
@@ -38,14 +38,14 @@
 
 ---
 
-## Phase 1: Class Generation (Fractal SWFC Proof)
+## Phase 1: Class Generation (Fractal SSR Proof)
 
 **Goal**: Prove fractal constraint inheritance works. Player describes a class → LLM proposes names → player selects → LLM proposes abilities → LLM collapses ability properties.
 
 ### Why First?
 
 - **Isolated system**: No spatial relationships, no rendering complexity
-- **Validates core SWFC loop**: Request → Propose → Validate → Commit
+- **Validates core SSR loop**: Request → Propose → Validate → Commit
 - **Visible proof**: Player sees meaningful, coherent output immediately
 - **Fast iteration**: No game loop, no canvas, just forms and text
 
@@ -101,7 +101,7 @@
 
 ---
 
-## Phase 2: Core SWFC Engine
+## Phase 2: Core SSR Engine
 
 **Goal**: Build the reusable engine components needed for dungeon generation.
 
@@ -120,7 +120,7 @@
 - Prune soft constraints below strength threshold
 - Query constraints for entity
 
-#### 2.3 SWFC Engine (`src/engine/SWFCEngine.ts`)
+#### 2.3 SSR Engine (`src/engine/SSREngine.ts`)
 
 - Orchestrate collapse flow:
   1. Build request (context, constraints, whitelist)
@@ -169,7 +169,7 @@
 
 #### 3.3 Room Entity (`src/dungeon/RoomEntity.ts`)
 
-- Room as SWFC entity
+- Room as SSR entity
 - Latent: only position, dimensions, neighbors
 - Collapsed: type, theme, description, objects, monsters
 
@@ -205,7 +205,7 @@
 #### 4.2 Async Collapse Worker
 
 - Background worker processes queue
-- Calls SWFCEngine.collapse() for each entity
+- Calls SSREngine.collapse() for each entity
 - Updates entity state on completion
 
 #### 4.3 Pause-and-Wait
@@ -349,7 +349,7 @@
 |-------|-------|-----------------|
 | 0 | Foundation | Working project + Ollama client |
 | 1 | Class Generation | Full fractal collapse flow |
-| 2 | Core Engine | Reusable SWFC components |
+| 2 | Core Engine | Reusable SSR components |
 | 3 | Dungeon Layout | BSP + Rendering + Navigation |
 | 4 | Horizon Lookahead | Latency hiding with +2 async |
 | 5 | Room Collapse | Semantic rooms with propagation |
@@ -360,7 +360,7 @@
 
 ## Milestones
 
-### Milestone 1: "SWFC Works" (Phase 0-1)
+### Milestone 1: "SSR Works" (Phase 0-1)
 > Player describes a class, LLM generates coherent names/abilities/properties with visible constraint inheritance.
 
 ### Milestone 2: "Dungeon Exists" (Phase 2-3)
@@ -376,4 +376,4 @@
 > Objects collapse progressively, player can interact with anything.
 
 ### Milestone 6: "Demo Complete" (Phase 7)
-> Polished, presentable proof of SWFC.
+> Polished, presentable proof of SSR.

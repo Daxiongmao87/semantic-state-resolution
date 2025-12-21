@@ -1,5 +1,5 @@
 /**
- * SWFC Core Type Definitions
+ * SSR Core Type Definitions
  * Based on README.md §3 and SPEC.md §9
  */
 
@@ -37,7 +37,7 @@ export const STRENGTH_THRESHOLD = 0.15;
 // Event Sourcing (§4.4)
 // =============================================================================
 
-export type SWFCEvent =
+export type SSREvent =
     | EntityCreatedEvent
     | CollapseStartedEvent
     | CollapseCommittedEvent

@@ -6,7 +6,7 @@
  */
 
 import type {
-    SWFCEvent,
+    SSREvent,
     CollapseCommittedEvent,
     DeltaAppliedEvent,
     PlayerMovedEvent,
@@ -47,7 +47,7 @@ export interface ProjectedGameState {
  * Project the current game state from the Event Log
  * This is the canonical way to derive state from events
  */
-export function projectCurrentState(events?: readonly SWFCEvent[]): ProjectedGameState {
+export function projectCurrentState(events?: readonly SSREvent[]): ProjectedGameState {
     const eventLog = getEventLog();
     const allEvents = events ?? eventLog.getAll();
 
@@ -68,7 +68,7 @@ export function projectCurrentState(events?: readonly SWFCEvent[]): ProjectedGam
 /**
  * Apply a single event to the projected state
  */
-function applyEventToState(state: ProjectedGameState, event: SWFCEvent): void {
+function applyEventToState(state: ProjectedGameState, event: SSREvent): void {
     switch (event.type) {
         case 'EntityCreated': {
             // Create entity with initial constraints

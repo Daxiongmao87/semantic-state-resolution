@@ -78,12 +78,12 @@ export class AppStateManager {
             eventLog: JSON.parse(eventLog.export()),
             ...data
         };
-        localStorage.setItem('swfc_save', JSON.stringify(saveData));
+        localStorage.setItem('SSR_save', JSON.stringify(saveData));
         console.log('[AppState] Game Saved');
     }
 
     public loadGame(): GameSaveData | null {
-        const json = localStorage.getItem('swfc_save');
+        const json = localStorage.getItem('SSR_save');
         if (!json) return null;
         try {
             const data = JSON.parse(json) as GameSaveData;

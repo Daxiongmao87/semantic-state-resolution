@@ -1,5 +1,5 @@
 /**
- * SWFC Demo Entry Point
+ * SSR Demo Entry Point
  * Supports two modes: Class Generation and Dungeon Exploration
  */
 
@@ -27,7 +27,7 @@ let playerController: PlayerController | null = null;
 let currentQuest: QuestResult | null = null;
 
 async function init(): Promise<void> {
-    console.log('=== SWFC Demo ===');
+    console.log('=== SSR Demo ===');
 
     // Test OpenRouter connection first
     const solver = getOpenRouterSolver();
@@ -373,7 +373,7 @@ async function handleInspection(x: number, y: number): Promise<void> {
 }
 
 init().catch(error => {
-    console.error('[SWFC] Init failed:', error);
+    console.error('[SSR] Init failed:', error);
     const statusEl = document.getElementById('connection-status');
     if (statusEl) {
         statusEl.textContent = `✗ Init failed: ${error.message}`;

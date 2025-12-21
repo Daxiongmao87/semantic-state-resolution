@@ -580,7 +580,7 @@ Provide 'object_count' as an integer, then provide exactly that many 'visible_ob
 
     /**
      * V2 Fix: Create object slots post-collapse based on semantic count
-     * This implements the key SWFC principle: semantics determine objects
+     * This implements the key SSR principle: semantics determine objects
      */
     private createSemanticObjectSlots(
         roomId: string,
