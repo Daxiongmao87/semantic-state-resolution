@@ -41,6 +41,7 @@ export class PlayerController {
             facing: 'south',
             currentRoomId: layout.entranceRoomId,
             inventory: ['Rusty Sword', 'Healing Potion', 'Torch', 'Leather Chest'],
+            wealth: 500, // Start with 5 gold worth (500 copper)
             equipment: {
                 head: null,
                 chest: null,

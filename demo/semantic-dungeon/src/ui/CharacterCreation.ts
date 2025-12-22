@@ -167,11 +167,15 @@ export class CharacterCreation {
             // Defaults
             x: 0,
             y: 0,
-            facing: 'north',
+            facing: 'north' as const,
             currentRoomId: null,
             inventory: [],
+            wealth: 500, // Start with 5 gold worth (500 copper)
             equipment: { head: null, chest: null, mainHand: null, offHand: null }
         };
+
+        // Set shared player state in appState for cross-screen access
+        appState.setPlayerState(startingState);
 
         // We save this as the "New Game" state
         appState.saveGame({
@@ -179,6 +183,6 @@ export class CharacterCreation {
         });
 
         console.log('[CharacterCreation] Complete. Starting Game.');
-        appState.switchScreen(GameScreen.Gameplay);
+        appState.switchScreen(GameScreen.Town);
     }
 }

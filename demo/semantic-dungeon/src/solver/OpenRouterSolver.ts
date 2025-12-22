@@ -15,7 +15,7 @@ export interface OpenRouterSolverConfig {
 
 const DEFAULT_CONFIG: OpenRouterSolverConfig = {
     baseUrl: 'https://openrouter.ai/api/v1',
-    apiKey: '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',
+    apiKey: import.meta.env.VITE_OPENROUTER_API_KEY || '',
     model: 'mistralai/devstral-2512:free',
     maxRetries: 3
 };

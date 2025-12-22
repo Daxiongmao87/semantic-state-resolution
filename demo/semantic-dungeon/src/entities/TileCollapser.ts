@@ -522,6 +522,11 @@ async function handleDoorInteraction(
     const door = room.components.doors.find(d => d.position.x === x && d.position.y === y);
     if (!door) return "The door is jammed.";
 
+    // Special case: EGRESS door leads back to town
+    if (door.connectedRoomId === 'EGRESS') {
+        return 'EGRESS_EXIT'; // Magic string caught by caller to trigger town transition
+    }
+
     // Lazy Collapse: Determine if Locked or Unlocked
     eventLog.append({
         type: 'CollapseStarted',

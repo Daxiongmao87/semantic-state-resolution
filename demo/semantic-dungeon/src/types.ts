@@ -265,6 +265,8 @@ export interface PlayerState {
     facing: 'north' | 'south' | 'east' | 'west';
     currentRoomId: string | null;
     inventory: string[];
+    /** Wealth in copper units (1 gold = 100 copper, 1 silver = 10 copper) */
+    wealth: number;
     equipment: EquipmentSlots;
     // Character System
     name?: string;

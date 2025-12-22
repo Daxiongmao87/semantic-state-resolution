@@ -20,6 +20,7 @@ import { appState } from './engine/AppStateManager';
 import { MainMenu } from './ui/MainMenu';
 import { PauseMenu } from './ui/PauseMenu';
 import { GameScreen } from './GameTypes';
+import { TownInterface } from './ui/TownInterface';
 
 let dungeonLayout: DungeonLayout | null = null;
 let dungeonRenderer: DungeonRenderer | null = null;
@@ -144,29 +145,54 @@ async function generateDungeon(quest: QuestResult): Promise<void> {
     playerController.setInputEnabled(true);
 }
 
+// function moved to top level scope
 function setupStateHandling() {
     appState.subscribe((screen: GameScreen) => {
         console.log(`[Main] Screen changed to: ${screen}`);
+
+        // Cleanup previous screens
+        const app = document.getElementById('app');
+        if (app) app.innerHTML = ''; // Brutal clear for now, fine for demo
 
         switch (screen) {
             case GameScreen.CharacterCreation:
                 initClassMode();
                 break;
+            case GameScreen.Town:
+                initTownMode();
+                break;
             case GameScreen.Gameplay:
                 initDungeonMode();
                 break;
             case GameScreen.MainMenu:
-                // Cleanup if needed
+                new MainMenu('main-menu');
                 break;
         }
+    });
+
+}
+
+function initTownMode(): void {
+    console.log('[Mode] Switching to Town');
+    new TownInterface('town-container', (rumor: any) => {
+        console.log('[Town] Starting dungeon from rumor:', rumor);
+        // Store the rumor as the current quest
+        currentQuest = {
+            description: rumor.description,
+            constraints: rumor.constraints || []
+        };
+        appState.switchScreen(GameScreen.Gameplay);
     });
 }
 
 // ... initClassMode ...
 function initClassMode(): void {
-    const container = document.getElementById('class-generator')!;
-    // Always create new instance to refresh config?
-    // Or just clear it.
+    let container = document.getElementById('class-generator');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'class-generator';
+        document.getElementById('app')?.appendChild(container);
+    }
     container.innerHTML = '';
     new CharacterCreation('class-generator');
 }
@@ -174,8 +200,9 @@ function initClassMode(): void {
 function initDungeonMode(): void {
     console.log('[Mode] Switching to Dungeon Exploration');
 
-    const classContainer = document.getElementById('class-generator')!;
-    classContainer.style.display = 'none';
+    // Hide class container if it exists
+    const classContainer = document.getElementById('class-generator');
+    if (classContainer) classContainer.style.display = 'none';
 
     // Create or show dungeon container
     let dungeonContainer = document.getElementById('dungeon-container');
@@ -238,9 +265,15 @@ function initDungeonMode(): void {
 
     // Always check if we need to generate a dungeon (e.g. New Game or Refresh)
     if (!dungeonLayout) {
-        promptForQuest().then(quest => {
-            generateDungeon(quest);
-        });
+        if (currentQuest) {
+            console.log('[Dungeon] Using quest from town/rumor:', currentQuest);
+            generateDungeon(currentQuest);
+            currentQuest = null;
+        } else {
+            promptForQuest().then(quest => {
+                generateDungeon(quest);
+            });
+        }
     }
 }
 

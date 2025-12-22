@@ -306,6 +306,18 @@ async function handleInteract(): Promise<void> {
 
         const result = await interactWithTile(state.layout, state.x, state.y, action, state.inventory, playerState);
 
+        // Check for EGRESS exit signal - return to town
+        if (result.description === 'EGRESS_EXIT' || result.description?.includes('EGRESS_EXIT')) {
+            state.isOpen = false;
+            state.isLoading = false;
+            renderModal();
+
+            // Import GameScreen and transition
+            const { GameScreen } = await import('../GameTypes');
+            appState.switchScreen(GameScreen.Town);
+            return;
+        }
+
         // Update state with result
         state.currentDescription = result.description;
         state.mechanics = result.mechanics || null; // Update mechanics
@@ -319,7 +331,7 @@ async function handleInteract(): Promise<void> {
             if (acquiredItems.length > 0) {
                 acquiredItems.forEach(item => {
                     if (onInventoryAddCallback) onInventoryAddCallback(item);
-                    state.inventory.push(item); // Keep local state in sync
+                    // state.inventory.push(item); // REMOVED: Duplicate push, callback handles it via shared reference or event update
                 });
 
                 const itemStr = acquiredItems.join(', ');

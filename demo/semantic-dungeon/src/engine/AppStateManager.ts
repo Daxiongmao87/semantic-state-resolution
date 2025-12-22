@@ -1,14 +1,18 @@
 import { GameScreen, GameSaveData, GameConfig } from '../GameTypes';
 import { getEventLog } from './EventLog';
+import { PlayerState } from '../types';
 
 export class AppStateManager {
     private currentScreen: GameScreen = GameScreen.MainMenu;
     private config: GameConfig = {};
+    /** Shared player state - single source of truth across all screens */
+    private playerState: PlayerState | null = null;
     private containers: Record<GameScreen, string> = {
         [GameScreen.MainMenu]: 'main-menu',
         [GameScreen.CharacterCreation]: 'class-generator',
         [GameScreen.QuestSelection]: 'quest-selection',
         [GameScreen.WorldContext]: 'world-context',
+        [GameScreen.Town]: 'town-container',
         [GameScreen.Gameplay]: 'dungeon-container'
     };
 
@@ -61,12 +65,50 @@ export class AppStateManager {
         this.listeners.forEach(listener => listener(screen));
     }
 
+    public getCurrentScreen(): GameScreen {
+        return this.currentScreen;
+    }
+
     public setConfig(config: Partial<GameConfig>) {
         this.config = { ...this.config, ...config };
     }
 
     public getConfig(): GameConfig {
         return this.config;
+    }
+
+    /** Get the shared player state */
+    public getPlayerState(): PlayerState | null {
+        return this.playerState;
+    }
+
+    /** Set/update the shared player state */
+    public setPlayerState(state: PlayerState) {
+        this.playerState = state;
+    }
+
+    /** Get player wealth (in copper). Returns 0 if no player. */
+    public getWealth(): number {
+        return this.playerState?.wealth ?? 0;
+    }
+
+    /** Spend wealth (in copper). Returns true if successful. */
+    public spendWealth(amount: number): boolean {
+        if (!this.playerState || this.playerState.wealth < amount) return false;
+        this.playerState.wealth -= amount;
+        return true;
+    }
+
+    /** Add wealth (in copper). */
+    public addWealth(amount: number): void {
+        if (this.playerState) {
+            this.playerState.wealth += amount;
+        }
+    }
+
+    /** Check if player can afford a cost */
+    public hasWealth(amount: number): boolean {
+        return (this.playerState?.wealth ?? 0) >= amount;
     }
 
     public saveGame(data: any) {

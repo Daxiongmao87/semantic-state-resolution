@@ -3,6 +3,7 @@ import { PlayerState } from './types';
 export enum GameScreen {
     MainMenu = 'main_menu',
     CharacterCreation = 'character_creation',
+    Town = 'town',
     QuestSelection = 'quest_selection',
     WorldContext = 'world_context',
     Gameplay = 'gameplay'

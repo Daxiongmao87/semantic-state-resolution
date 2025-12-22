@@ -157,7 +157,7 @@ export class DungeonGenerator {
         // Step 4: Create corridors and establish neighbors
         const corridors = this.connectRooms(root, rooms);
 
-        // Step 5: Add EGRESS constraint to entrance room
+        // Step 5: Add EGRESS constraint and door to entrance room
         const entranceRoomId = 'room_0';
         const entranceRoom = rooms.get(entranceRoomId)!;
         entranceRoom.constraints.push({
@@ -168,6 +168,20 @@ export class DungeonGenerator {
             sourceEventId: 'dungeon_generation'
         });
         entranceRoom.components.neighbors.push('EGRESS');
+
+        // Add egress door on the south side of entrance room
+        const entrancePos = entranceRoom.components.position;
+        const entranceDim = entranceRoom.components.dimensions;
+        const egressDoorX = entrancePos.x + Math.floor(entranceDim.width / 2);
+        const egressDoorY = entrancePos.y + entranceDim.height - 1; // South wall
+
+        entranceRoom.components.doors.push({
+            id: 'door_egress',
+            position: { x: egressDoorX, y: egressDoorY },
+            direction: 'south',
+            connectedRoomId: 'EGRESS',
+            state: 'open' // Always open - it's the way out
+        });
 
         // Step 6: Generate tile map
         const tiles = this.generateTileMap(rooms, corridors);

@@ -3,18 +3,28 @@ import { GameScreen } from '../GameTypes';
 
 export class MainMenu {
     private containerId: string;
+    private container: HTMLElement | null = null;
 
     constructor(containerId: string) {
         this.containerId = containerId;
+        this.initialize();
+    }
+
+    private initialize() {
+        this.container = document.getElementById(this.containerId);
+        if (!this.container) {
+            this.container = document.createElement('div');
+            this.container.id = this.containerId;
+            document.getElementById('app')?.appendChild(this.container);
+        }
         this.render();
         this.bindEvents();
     }
 
     private render() {
-        const container = document.getElementById(this.containerId);
-        if (!container) return;
+        if (!this.container) return;
 
-        container.innerHTML = `
+        this.container.innerHTML = `
             <div class="main-menu">
                 <div class="menu-content">
                     <h1>Semantic Dungeon</h1>

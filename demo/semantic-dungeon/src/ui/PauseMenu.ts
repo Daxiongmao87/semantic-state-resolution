@@ -35,22 +35,18 @@ export class PauseMenu {
 
     private bindGlobalInput() {
         document.addEventListener('keydown', (e) => {
-            // Only toggle if in Gameplay or if menu is already open
             if (e.key === 'Escape') {
-                const currentScreen = appState.getConfig(); // Wait, appState.getConfig doesn't give screen.
-                // We need to know current screen. 
-                // But AppStateManager stores it privately.
-                // pause menu shouldn't open during generic screens.
+                const currentScreen = appState.getCurrentScreen();
 
-                // Let's assume if overlay is open, ESC closes it.
+                // Close if open
                 if (this.isOpen) {
                     this.toggle(false);
-                } else {
-                    // Check if we can pause (using public hack or just check DOM)
-                    const gameContainer = document.getElementById('dungeon-container');
-                    if (gameContainer && gameContainer.style.display !== 'none') {
-                        this.toggle(true);
-                    }
+                    return;
+                }
+
+                // Open if in Gameplay
+                if (currentScreen === GameScreen.Gameplay) {
+                    this.toggle(true);
                 }
             }
         });
