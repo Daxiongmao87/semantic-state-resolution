@@ -18,3 +18,8 @@ coverage/
 .vscode/
 .idea/
 .gemini/
+
+# Environment variables (NEVER commit these)
+.env
+.env.local
+.env.*.local

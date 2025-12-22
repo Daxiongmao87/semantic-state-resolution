@@ -1,61 +1,71 @@
 
-import { TownState, NPC, Rumor, TownLocation, TownEvent, DayEvent, DEFAULT_CURRENCY, CURRENCY, Disposition } from './TownTypes';
-import { getOpenRouterSolver } from '../solver/OpenRouterSolver';
+import { TownState, NPC, Rumor, TownLocation, TownEvent, DayEvent, DEFAULT_CURRENCY, Disposition, ShopItem } from './TownTypes';
+import { getOpenRouterSolver, OpenRouterSolver } from '../solver/OpenRouterSolver';
 import { appState } from '../engine/AppStateManager';
+import { v4 as uuidv4 } from 'uuid';
 
 class TownManager {
-    private state: TownState = {
-        npcs: [],
-        activeRumors: [],
-        currentDay: 1,
-        currencyNames: { ...DEFAULT_CURRENCY },
-        locations: [],
-        isCollapsed: false,
-        eventLog: [],
-        dayEvents: {}
-    };
-
-    private solver = getOpenRouterSolver();
+    private state: TownState;
+    private solver: OpenRouterSolver;
     private collapsingPromise: Promise<void> | null = null;
 
     constructor() {
-        // Load state if exists? For now, transient.
+        this.solver = getOpenRouterSolver();
+        this.state = {
+            currentDay: 1,
+            isCollapsed: false,
+            locations: [],
+            npcs: [],
+            activeRumors: [],
+            eventLog: [],
+            dayEvents: {},
+            currencyNames: DEFAULT_CURRENCY
+        };
     }
 
+    /**
+     * Get the current town state
+     */
     public getState(): TownState {
         return this.state;
     }
 
-    /**
-     * Get a location's data. If not collapsed, returns placeholder.
-     */
-    public getLocation(id: 'town' | 'tavern' | 'shop' | 'gate'): TownLocation {
-        const found = this.state.locations.find(l => l.id === id);
-        if (found) return found;
 
-        // Fallback - should not happen after collapse
-        return { id, name: 'Loading...', description: 'The world is forming...', collapsedFacts: {} };
+
+    // ==========================================
+    // PUBLIC API FOR UI
+    // ==========================================
+
+    public formatCurrency(amount: number): string {
+        // Simple formatter: 100 cp = 1 gold
+        if (amount >= 100) {
+            const gold = Math.floor(amount / 100);
+            const copper = amount % 100;
+            return copper > 0 ? `${gold}g ${copper}cp` : `${gold}g`;
+        }
+        return `${amount}cp`;
     }
 
-    /**
-     * Format a copper amount using collapsed currency names.
-     * Returns something like "2 Crowns, 5 Shillings" or "50 Copper Coins"
-     */
-    public formatCurrency(copperAmount: number): string {
-        const gold = Math.floor(copperAmount / CURRENCY.COPPER_PER_GOLD);
-        const remainder = copperAmount % CURRENCY.COPPER_PER_GOLD;
-        const silver = Math.floor(remainder / CURRENCY.COPPER_PER_SILVER);
-        const copper = remainder % CURRENCY.COPPER_PER_SILVER;
-
-        const parts: string[] = [];
-        const names = this.state.currencyNames;
-
-        if (gold > 0) parts.push(`${gold} ${names.gold}${gold !== 1 ? 's' : ''}`);
-        if (silver > 0) parts.push(`${silver} ${names.silver}${silver !== 1 ? 's' : ''}`);
-        if (copper > 0 || parts.length === 0) parts.push(`${copper} ${names.copper}${copper !== 1 ? 's' : ''}`);
-
-        return parts.join(', ');
+    public getLocation(locationId: string): TownLocation | undefined {
+        return this.state.locations.find(l => l.id === locationId);
     }
+
+    public async solveFreeFormAction(context: Record<string, any>): Promise<any> {
+        // Delegate to solver
+        return await this.solver.solve({
+            requestId: `action_${Date.now()}`,
+            taskType: 'FREE_FORM_ACTION',
+            entityId: context.location?.id || 'unknown',
+            context: context,
+            whitelist: { requiredFields: ['text'], optionalFields: ['facts', 'effects', 'new_rumor'] },
+            constraints: { hard: [], soft: [] }
+        });
+    }
+
+
+
+
+
 
     public updateNPCDisposition(npcId: string, shift: 'Improve' | 'Worsen'): void {
         const npc = this.state.npcs.find(n => n.id === npcId);
@@ -650,6 +660,144 @@ Format: { "response": "your dialogue", "collapsed_facts": { "key": "value" }, "r
 
         npc.history.push({ sender: 'npc', text: responseText, timestamp: Date.now() });
         return { text: responseText, newRumor };
+    }
+    // ==========================================
+    // SHOP SYSTEM
+    // ==========================================
+
+    /**
+     * Get shop inventory for an NPC. Triggers JIT generation if empty/expired.
+     */
+    public async getShopInventory(npcId: string): Promise<ShopItem[]> {
+        const npc = this.state.npcs.find(n => n.id === npcId);
+        if (!npc) return [];
+
+        // Initialize shop if missing
+        if (!npc.shop) {
+            npc.shop = {
+                inventory: [],
+                lastRestockDay: -1
+            };
+        }
+
+        // Check stock freshness (restock daily)
+        if (npc.shop.inventory.length === 0 || npc.shop.lastRestockDay < this.state.currentDay) {
+            console.log(`[Town] Restocking shop for ${npc.archetype}...`);
+            await this.collapseShopInventory(npc);
+        }
+
+        return npc.shop.inventory;
+    }
+
+    /**
+     * Generate shop inventory using LLM
+     */
+    public async collapseShopInventory(npc: NPC): Promise<void> {
+        if (!npc.shop) return; // Should be init by getShopInventory
+
+        const worldGenre = appState.getConfig()?.worldGenre || 'Dark Fantasy';
+        const shopType = npc.archetype === 'Barkeep' ? 'Tavern Service' : 'General Goods';
+
+        try {
+            const result = await this.solver.solve({
+                requestId: `shop_gen_${Date.now()}`,
+                taskType: 'GENERATE_ITEM', // Reusing or new task type? Let's use generic or a new one.
+                entityId: npc.id,
+                context: {
+                    worldGenre,
+                    shopType,
+                    npcArchetype: npc.archetype,
+                    instruction: `Generate a list of 5-8 items for a ${shopType} run by a ${npc.archetype} in a ${worldGenre} setting.
+                    Include a mix of common and rare items.
+                    
+                    Output JSON: { "items": [ { "name": "...", "description": "...", "cost": 10, "rarity": "Common|Rare|Legendary", "tags": ["weapon", "food"] } ] }
+                    Cost should be in copper coins (1 gold = 100 copper approx).
+                    Common: 10-100 cp. Rare: 100-1000 cp. Legendary: 1000+ cp.`
+                },
+                whitelist: { requiredFields: ['items'] },
+                constraints: { hard: [], soft: [] }
+            });
+
+            if (result.success && result.proposal) {
+                const data = result.proposal as any;
+                const items: ShopItem[] = (data.items || []).map((item: any) => ({
+                    id: uuidv4(),
+                    name: item.name,
+                    description: item.description,
+                    cost: item.cost,
+                    rarity: item.rarity,
+                    tags: item.tags || []
+                }));
+
+                npc.shop.inventory = items;
+                npc.shop.lastRestockDay = this.state.currentDay;
+
+                this.logEvent('SHOP_RESTOCKED', npc.id, { itemCount: items.length });
+            }
+        } catch (error) {
+            console.error('[Town] Shop generation failed:', error);
+            // Fallback
+            npc.shop.inventory = [
+                { id: uuidv4(), name: 'Mysterious Rations', description: 'Hardtack of unknown origin.', cost: 5, rarity: 'Common', tags: ['food'] }
+            ];
+            npc.shop.lastRestockDay = this.state.currentDay;
+        }
+    }
+
+    /**
+     * Buy an item from an NPC
+     */
+    public buyItem(npcId: string, itemId: string): { success: boolean; message: string } {
+        const npc = this.state.npcs.find(n => n.id === npcId);
+        if (!npc || !npc.shop) return { success: false, message: "Shop not found." };
+
+        const itemIndex = npc.shop.inventory.findIndex(i => i.id === itemId);
+        if (itemIndex === -1) return { success: false, message: "Item no longer available." };
+
+        const item = npc.shop.inventory[itemIndex];
+
+        if (!this.hasWealth(item.cost)) {
+            return { success: false, message: "Not enough coin." };
+        }
+
+        // Execute Transaction
+        this.spendWealth(item.cost);
+        appState.addToInventory(item.name); // Using simple name for now as inventory is string[]
+
+        // Remove from shop
+        npc.shop.inventory.splice(itemIndex, 1);
+
+        this.logEvent('ITEM_BOUGHT', npc.id, { item: item.name, cost: item.cost });
+        return { success: true, message: `Bought ${item.name} for ${this.formatCurrency(item.cost)}.` };
+    }
+
+    /**
+     * Sell an item to an NPC
+     * Simplistic implementation: Sell for 1/2 value? Or simpler, strict sell list?
+     * For now, we'll assume player sells "Inventory String Items". 
+     * We need to estimate value since player items don't store value.
+     * We'll trust the LLM or just use a flat rate / random rate for this MVP.
+     */
+    public sellItem(npcId: string, itemName: string): { success: boolean; message: string } {
+        // Validation
+        const playerState = appState.getPlayerState();
+        if (!playerState || !playerState.inventory.includes(itemName)) {
+            return { success: false, message: "You don't have that item." };
+        }
+
+        // Logic: selling gives 5-20 copper. 
+        // Real logic would require Item Registry.
+        // For MVP, flat 10 copper.
+        const sellValue = 10;
+
+        // Remove from inventory
+        const idx = playerState.inventory.indexOf(itemName);
+        if (idx > -1) playerState.inventory.splice(idx, 1);
+
+        this.addWealth(sellValue);
+
+        this.logEvent('ITEM_SOLD', npcId, { item: itemName, value: sellValue });
+        return { success: true, message: `Sold ${itemName} for ${this.formatCurrency(sellValue)}.` };
     }
 }
 

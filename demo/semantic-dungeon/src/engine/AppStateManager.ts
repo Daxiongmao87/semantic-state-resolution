@@ -101,9 +101,15 @@ export class AppStateManager {
 
     /** Add wealth (in copper). */
     public addWealth(amount: number): void {
-        if (this.playerState) {
-            this.playerState.wealth += amount;
-        }
+        if (!this.playerState) return;
+        this.playerState.wealth = (this.playerState.wealth || 0) + amount;
+        // this.notifyListeners(); // notifyListeners is not defined in the original document.
+    }
+
+    public addToInventory(item: string): void {
+        if (!this.playerState) return;
+        this.playerState.inventory.push(item);
+        // this.notifyListeners(); // notifyListeners is not defined in the original document.
     }
 
     /** Check if player can afford a cost */
@@ -142,6 +148,11 @@ export class AppStateManager {
             console.error('Failed to load save', e);
             return null;
         }
+    }
+    public startQuest(questData: any) {
+        // TODO: Store active quest data properly
+        console.log('[AppState] Starting quest:', questData);
+        this.switchScreen(GameScreen.Gameplay);
     }
 }
 

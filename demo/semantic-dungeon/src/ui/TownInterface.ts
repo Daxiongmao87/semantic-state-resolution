@@ -1,53 +1,69 @@
-
-import { appState } from '../engine/AppStateManager';
 import { GameScreen } from '../GameTypes';
 import { getTownManager } from '../town/TownManager';
-import { getOpenRouterSolver } from '../solver/OpenRouterSolver';
-import { openInventoryModal } from './InventoryModal';
+import { appState } from '../engine/AppStateManager';
+import { openShopModal, initShopModal } from './ShopModal';
+import { TownEventType } from '../town/TownTypes';
 
 export class TownInterface {
-    private containerId: string;
     private container: HTMLElement | null = null;
-    private currentView: 'main' | 'tavern' | 'shop' | 'gate' = 'main';
+    private containerId: string;
     private isReady: boolean = false;
+    private currentView: 'main' | 'tavern' | 'shop' | 'gate' = 'main';
     private keyListener: ((e: KeyboardEvent) => void) | null = null;
-    private onStartDungeon: (rumor: any) => void;
 
-    constructor(containerId: string, onStartDungeon: (rumor: any) => void) {
+    constructor(containerId: string) {
         this.containerId = containerId;
-        this.onStartDungeon = onStartDungeon;
-        this.container = document.getElementById(containerId);
+    }
 
-        // Global key listener for Town
+    private setupKeyboardShortcuts(): void {
+        if (this.keyListener) {
+            document.removeEventListener('keydown', this.keyListener);
+        }
         this.keyListener = (e: KeyboardEvent) => {
-            // Ignore if town is not visible
-            if (appState.getCurrentScreen() !== GameScreen.Town && this.container?.style.display === 'none') return;
-            // Ignore if typing in an input
-            if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+            if (!this.isReady) return;
 
+            // 'I' for Inventory
             if (e.key.toLowerCase() === 'i') {
                 this.openInventory();
+            }
+            // 'Escape' for Main Menu
+            if (e.key === 'Escape') {
+                appState.switchScreen(GameScreen.MainMenu);
             }
         };
         document.addEventListener('keydown', this.keyListener);
     }
 
     private openInventory(): void {
-        const player = appState.getPlayerState();
-        if (player) {
-            openInventoryModal(player, () => {
-                // On close, maybe refresh view if needed
-                this.updateView();
-            });
+        const modal = document.getElementById('inventory-modal');
+        if (modal) {
+            modal.classList.remove('hidden');
+            // Trigger update event for inventory
+            const event = new CustomEvent('inventory-opened');
+            window.dispatchEvent(event);
         }
+    }
+
+    private onStartDungeon(rumor: any): void {
+        appState.startQuest(rumor);
+    }
+
+    public update(): void {
+        // Periodic updates if needed
     }
 
     public async init(): Promise<void> {
         if (!this.container) {
-            this.container = document.createElement('div');
-            this.container.id = this.containerId;
-            document.getElementById('app')?.appendChild(this.container);
+            this.container = document.getElementById(this.containerId);
+            if (!this.container) {
+                this.container = document.createElement('div');
+                this.container.id = this.containerId;
+                document.getElementById('app')?.appendChild(this.container);
+            }
         }
+
+        // Initialize Modals
+        initShopModal();
 
         // Show loading state while town collapses
         this.container.innerHTML = `
@@ -63,6 +79,7 @@ export class TownInterface {
         await getTownManager().collapseTown();
 
         this.isReady = true;
+        this.setupKeyboardShortcuts();
         this.render();
     }
 
@@ -82,6 +99,8 @@ export class TownInterface {
         const tm = getTownManager();
         const townLocation = tm.getLocation('town');
 
+        if (!townLocation) return;
+
         this.container.innerHTML = `
             <div class="town-layout">
                 <header class="town-header">
@@ -92,15 +111,15 @@ export class TownInterface {
                         <span>Day: ${tm.getState().currentDay}</span>
                     </div>
                 </header>
-                
+
                 <main class="town-viewport" id="town-viewport">
                     <!-- View Content Injected Here -->
                 </main>
 
                 <nav class="town-nav">
-                    <button class="nav-btn" id="btn-tavern">🍺 ${tm.getLocation('tavern').name}</button>
-                    <button class="nav-btn" id="btn-shop">⚔️ ${tm.getLocation('shop').name}</button>
-                    <button class="nav-btn" id="btn-gate">🚪 ${tm.getLocation('gate').name}</button>
+                    <button class="nav-btn" id="btn-tavern">🍺 ${tm.getLocation('tavern')?.name || 'Tavern'}</button>
+                    <button class="nav-btn" id="btn-shop">⚔️ ${tm.getLocation('shop')?.name || 'Shop'}</button>
+                    <button class="nav-btn" id="btn-gate">🚪 ${tm.getLocation('gate')?.name || 'Gate'}</button>
                     <button class="nav-btn secondary" id="btn-menu">Main Menu</button>
                 </nav>
             </div>
@@ -119,6 +138,7 @@ export class TownInterface {
         switch (this.currentView) {
             case 'main':
                 const townLoc = tm.getLocation('town');
+                if (!townLoc) return;
                 viewport.innerHTML = `
                     <div class="location-view">
                         <h2>${townLoc.name}</h2>
@@ -126,13 +146,6 @@ export class TownInterface {
                         
                         <div id="action-response" class="action-response"></div>
                         
-                        <div class="action-suggestions">
-                            <span class="suggestions-label">Suggestions:</span>
-                            <button class="suggestion-btn" data-action="Look around the area">Look Around</button>
-                            <button class="suggestion-btn" data-action="Listen to nearby conversations">Eavesdrop</button>
-                            <button class="suggestion-btn" data-action="Examine the notice board">Check Notices</button>
-                        </div>
-
                         <div class="action-input-container">
                             <input type="text" id="town-action-input" class="town-action-input" placeholder="What do you do?" />
                             <button id="town-action-submit" class="action-submit-btn">Do It</button>
@@ -142,6 +155,7 @@ export class TownInterface {
                 break;
             case 'tavern':
                 const tavernLoc = tm.getLocation('tavern');
+                if (!tavernLoc) return;
                 const sleepCost = 10; // 1 silver (10 copper)
                 const canAffordSleep = tm.hasWealth(sleepCost);
                 viewport.innerHTML = `
@@ -149,8 +163,8 @@ export class TownInterface {
                         <h2>${tavernLoc.name}</h2>
                         <p class="location-desc">${tavernLoc.description}</p>
                         <div class="town-status-bar">
-                             <span class="day-counter">Day ${tm.getState().currentDay}</span>
-                             <span class="wealth-display">💰 ${tm.formatCurrency(tm.getWealth())}</span>
+                            <span class="day-counter">Day ${tm.getState().currentDay}</span>
+                            <span class="wealth-display">💰 ${tm.formatCurrency(tm.getWealth())}</span>
                         </div>
                         
                         <div id="action-response" class="action-response"></div>
@@ -160,12 +174,12 @@ export class TownInterface {
                             <button class="suggestion-btn" data-action="Talk to someone here">Talk to Someone</button>
                             <button class="suggestion-btn" data-action="Look around the room">Look Around</button>
                         </div>
-
+                        
                         <div class="action-input-container">
                             <input type="text" id="town-action-input" class="town-action-input" placeholder="What do you do? (e.g., 'I scan the room for interesting people')" />
                             <button id="town-action-submit" class="action-submit-btn">Do It</button>
                         </div>
-
+                        
                         <div class="tavern-actions">
                             <button class="action-btn primary" id="act-sleep" ${!canAffordSleep ? 'disabled' : ''}>
                                 🛏️ Sleep Here (${tm.formatCurrency(sleepCost)})
@@ -178,6 +192,7 @@ export class TownInterface {
                 break;
             case 'shop':
                 const shopLoc = tm.getLocation('shop');
+                if (!shopLoc) return;
                 viewport.innerHTML = `
                     <div class="location-view">
                         <h2>${shopLoc.name}</h2>
@@ -191,12 +206,12 @@ export class TownInterface {
                             <button class="suggestion-btn" data-action="Sell some items">Sell Items</button>
                             <button class="suggestion-btn" data-action="Ask about rare items">Ask About Rarities</button>
                         </div>
-
+                        
                         <div class="action-input-container">
                             <input type="text" id="town-action-input" class="town-action-input" placeholder="What do you do?" />
                             <button id="town-action-submit" class="action-submit-btn">Do It</button>
                         </div>
-
+                        
                         <button class="action-btn secondary" id="act-leave">Leave</button>
                     </div>
                 `;
@@ -204,6 +219,7 @@ export class TownInterface {
             case 'gate':
                 // Dynamic rendering of rumors from TownManager
                 const gateLoc = tm.getLocation('gate');
+                if (!gateLoc) return;
                 const rumors = tm.getState().activeRumors;
                 const rumorList = rumors.length > 0
                     ? rumors.map(r => `
@@ -275,6 +291,32 @@ export class TownInterface {
             btn.addEventListener('click', () => {
                 this.currentView = 'main';
                 this.updateView();
+            });
+        });
+
+        // Suggestion Buttons
+        document.querySelectorAll('.suggestion-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const actionText = (btn as HTMLElement).dataset.action;
+                if (!actionText) return;
+
+                // SPECIAL: Shop
+                if (actionText === 'Browse the wares') {
+                    const tm = getTownManager();
+                    // Find merchant
+                    const merchant = tm.getState().npcs.find(n => n.archetype === 'Merchant');
+                    if (merchant) {
+                        openShopModal(merchant.id, `${merchant.collapsedFacts.name?.value || 'Merchant'}'s Wares`, 'General Goods');
+                        return;
+                    }
+                }
+
+                // Default: autofill input
+                const input = document.getElementById('town-action-input') as HTMLInputElement;
+                if (input) {
+                    input.value = actionText;
+                    input.focus();
+                }
             });
         });
 
@@ -396,113 +438,44 @@ export class TownInterface {
             (this.currentView === 'shop' && n.archetype === 'Merchant')
         );
 
-        // Build established facts context to prevent retcons
-        let establishedFacts = '';
-        if (locationNPC) {
-            establishedFacts = `
-ESTABLISHED FACTS (DO NOT CONTRADICT):
-- There is a ${locationNPC.archetype} here named "${locationNPC.collapsedFacts.name?.value || 'Unknown'}"
-- Their personality: ${locationNPC.collapsedFacts.personality?.value || 'Unknown'}
-- Description: ${locationNPC.collapsedFacts.description?.value || 'Unknown'}
-`;
-            establishedFacts += `- Disposition towards you: ${locationNPC.disposition} (State: Hostile <-> Cold <-> Neutral <-> Friendly <-> Trusting)\n`;
-        }
-
-        // Get player profile for skill checks
-        const player = appState.getPlayerState();
-        let playerProfile = "Unknown Wanderer";
-        if (player) {
-            const stats = player.abilities || { str: 0, dex: 0, con: 0, int: 0, wis: 0, cha: 0 };
-            playerProfile = `
-            Name: ${player.name || 'Hero'}
-            Race: ${player.race?.name || 'Human'} (${player.race?.traits?.join(', ') || 'None'})
-            Class: ${player.class?.name || 'Adventurer'}
-            Stats:
-            STR: ${stats.str} (Mod: ${Math.floor((stats.str - 10) / 2)
-                })
-        DEX: ${stats.dex}
-        CON: ${stats.con}
-        INT: ${stats.int}
-        WIS: ${stats.wis}
-        CHA: ${stats.cha} (Mod: ${Math.floor((stats.cha - 10) / 2)
-                })
-`;
-        }
-
         try {
-            const solver = getOpenRouterSolver();
-            const response = await solver.solve({
-                requestId: `town_action_${Date.now()} `,
-                taskType: 'TOWN_ACTION',
-                entityId: `town_${this.currentView} `,
-                context: {
-                    location: location.name,
-                    locationDescription: location.description,
-                    action: action,
-                    establishedFacts: establishedFacts,
-                    playerProfile: playerProfile,
-                    townState: {
-                        wealth: tm.formatCurrency(tm.getWealth()),
-                        day: tm.getState().currentDay,
-                        activeRumors: tm.getState().activeRumors.length
-                    },
-                    currencyNames: tm.getState().currencyNames,
-                    instruction: `You are a narrative game master for a dark fantasy roguelike.
+            // Construct prompt context
+            // Note: tm, location, locationNPC, player are already defined above
+            const player = appState.getPlayerState();
+            const context = {
+                action: action,
+                location: location,
+                npc: locationNPC,
+                player: player,
+                // Pass disposition explicitly
+                npcDisposition: locationNPC ? locationNPC.disposition : undefined
+            };
 
-The player is at: ${location.name}
-${establishedFacts}
-
-PLAYER PROFILE:
-${playerProfile}
-
-The player says / does: "${action}"
-
-Stats are D & D - like(10 = average, 15 = strong).Use these to judge success!
-    - High CHA: Persuasion / Deception works better.
-- Disposition: If 'Hostile', persuasion is harder.If 'Friendly', easier.
-
-    CRITICAL:
-1. Do not contradict established facts.
-2. If player tries something requiring skill, check their relevant stat.
-3. If player behavior would change the NPC's opinion, propose a 'disposition_shift'.
-
-Respond with JSON:
-1. "description" - Narrative response(2 - 4 sentences).
-2. "collapsed_facts" - (optional) New facts.
-3. "new_rumor" - (optional) Rumor details.
-4. "effects" - (optional) Game state changes:
-- "wealth_change": number
-    - "items_gained": string[]
-        - "items_lost": string[]
-            - "disposition_shift": "Improve" | "Worsen"(Should the NPC like the player more or less ?)
-
-Example: Buying a round -> disposition_shift: "Improve".
-    Example: Insulting them -> disposition_shift: "Worsen".`
-                },
-                constraints: { hard: [], soft: [] },
-                whitelist: {
-                    requiredFields: ['description'],
-                    optionalFields: ['new_rumor', 'collapsed_facts', 'effects'],
-                    // explanation: 'description is the narrative response. effects are game state changes.' // Removed to save tokens/clean up
-                }
-            });
+            const response = await tm.solveFreeFormAction(context);
 
             if (response.success && response.proposal) {
-                const desc = String(response.proposal.description || 'Nothing happens.');
-                responseEl.innerHTML = `< div class="action-result" > ${desc} </div>`;
+                // Render response with HTML sanitization for the TEXT part
+                const rawText = response.proposal.text || "The action has no visible result.";
+                const safeText = rawText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
 
-                // ===== SSR: Store collapsed facts from LLM response =====
-                const collapsedFacts = response.proposal.collapsed_facts as Record<string, Record<string, any>> | undefined;
-                if (collapsedFacts) {
-                    for (const [archetype, facts] of Object.entries(collapsedFacts)) {
-                        const npc = tm.getNPCByArchetype(archetype);
-                        if (npc) {
-                            tm.appendNPCFacts(npc.id, facts);
+                responseEl.innerHTML = `<div class="action-result">${safeText}</div>`;
+
+                // ... apply facts ...
+                if (response.proposal.facts) {
+                    if (response.proposal.facts.location_facts) {
+                        const facts = response.proposal.facts.location_facts;
+                        if (Object.keys(facts).length > 0) {
+                            tm.appendLocationFacts(this.currentView, facts);
+                        }
+                    }
+                    if (response.proposal.facts.npc_facts && locationNPC) {
+                        const facts = response.proposal.facts.npc_facts;
+                        if (Object.keys(facts).length > 0) {
+                            tm.appendNPCFacts(locationNPC.id, facts);
                         }
                     }
                 }
 
-                // ===== Apply effects (wealth/inventory changes) =====
                 // ===== Apply effects (wealth/inventory changes) =====
                 const effects = response.proposal.effects as {
                     wealth_change?: number;
@@ -532,10 +505,10 @@ Example: Buying a round -> disposition_shift: "Improve".
 
                     // Items gained
                     if (effects.items_gained && effects.items_gained.length > 0) {
-                        const playerState = appState.getPlayerState();
-                        if (playerState) {
+                        const pState = appState.getPlayerState();
+                        if (pState) {
                             for (const item of effects.items_gained) {
-                                playerState.inventory.push(item);
+                                pState.inventory.push(item);
                                 effectsHtml += `<div class="effect-gained">📦 Received: ${item}</div>`;
                             }
                         }
@@ -543,12 +516,12 @@ Example: Buying a round -> disposition_shift: "Improve".
 
                     // Items lost
                     if (effects.items_lost && effects.items_lost.length > 0) {
-                        const playerState = appState.getPlayerState();
-                        if (playerState) {
+                        const pState = appState.getPlayerState();
+                        if (pState) {
                             for (const item of effects.items_lost) {
-                                const idx = playerState.inventory.indexOf(item);
+                                const idx = pState.inventory.indexOf(item);
                                 if (idx !== -1) {
-                                    playerState.inventory.splice(idx, 1);
+                                    pState.inventory.splice(idx, 1);
                                     effectsHtml += `<div class="effect-spent">📤 Lost: ${item}</div>`;
                                 }
                             }
@@ -559,7 +532,6 @@ Example: Buying a round -> disposition_shift: "Improve".
                     if (effects.disposition_shift && locationNPC) {
                         tm.updateNPCDisposition(locationNPC.id, effects.disposition_shift as 'Improve' | 'Worsen');
                         const newDisp = tm.getState().npcs.find(n => n.id === locationNPC.id)?.disposition;
-                        // Visualize the shift (e.g. log message or color change) -> for now log it
                         if (newDisp) {
                             const shiftIcon = effects.disposition_shift === 'Improve' ? '💚' : '💔';
                             effectsHtml += `<div class="effect-disp">relationship: ${shiftIcon} ${newDisp}</div>`;
@@ -568,18 +540,17 @@ Example: Buying a round -> disposition_shift: "Improve".
 
                     if (effectsHtml) {
                         responseEl.innerHTML += `<div class="action-effects">${effectsHtml}</div>`;
-                        // Refresh display to show updated wealth
                         this.updateView();
                     }
                 }
 
-                // Handle new rumor if discovered
+                // Handle new rumor
                 if (response.proposal.new_rumor) {
                     const rumorData = response.proposal.new_rumor as any;
                     tm.addRumor({
                         id: `rumor_${Date.now()}`,
                         title: rumorData.title || 'A Whispered Lead',
-                        description: rumorData.description || desc,
+                        description: rumorData.description || 'Details are scarce...',
                         difficulty: rumorData.difficulty || 'medium',
                         location: rumorData.location || 'Unknown Depths',
                         constraints: [],
@@ -590,12 +561,6 @@ Example: Buying a round -> disposition_shift: "Improve".
                 }
             } else {
                 responseEl.innerHTML = '<div class="action-result">The world offers no response.</div>';
-            }
-
-            if (submitBtn) submitBtn.disabled = false;
-            if (inputEl) {
-                inputEl.disabled = false;
-                inputEl.focus();
             }
 
         } catch (error) {

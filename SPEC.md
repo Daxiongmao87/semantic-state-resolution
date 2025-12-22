@@ -12,6 +12,7 @@ The demo proves SSR's core thesis through two systems:
 |--------|----------------|
 | **Dungeon Generation** | Rooms/objects exist as Latent Entities until observed. LLM proposes themes based on quest + neighbor constraints. |
 | **Character Class Generation** | Fractal Collapse — description → class name → abilities → properties. Each level inherits constraints from parent. |
+| **Town & Rumors** | **Rumors are Latent Dungeons**. Conversations with JIT NPCs generate semantic constraint sets (Rumors) that seed future dungeons. |
 
 ---
 
@@ -576,3 +577,65 @@ For development, a debug overlay displays:
 - Event log tail (last 10 events)
 
 Toggle with `~` key.
+
+---
+
+## 14. Town & Rumor System
+
+### 14.1 Philosophy: Rumors are Latent Dungeons
+
+In SSR, a "Rumor" is not just flavor text. It is a **Latent Dungeon Seed**. Gaining a rumor means acquiring a set of **Hard Constraints** that will be passed to the Dungeon Generator.
+
+`Rumor = { Theme, QuestType, Difficulty, KeyEntities, MutationTags }`
+
+### 14.2 Town Loop
+
+The game loop expands:
+`Character Gen` -> `Town Hub` <-> `NPC Interaction` -> `Rumor Discovery` -> `Dungeon Generation` -> `Town Hub`.
+
+**Town Hub UI**:
+- **Menu-based**: static background with buttons for "Tavern", "Shop", "Gate".
+- **Locations**:
+  - **Tavern**: Rest (restore resources), Gather Rumors (Talk to NPCs).
+  - **Shop**: Buy/Sell items.
+  - **Gate**: Select a discovered Rumor to "Embark" (Start Dungeon).
+
+### 14.3 NPC Generation (JIT)
+
+NPCs in the tavern/shop are generated JIT based on the location's current atmosphere.
+
+**Schema**:
+```typescript
+interface NPC {
+  id: string;
+  name: string;
+  archetype: string; // e.g. "Grumpy Barkeep", "Scarred Mercenary"
+  knowledge: Rumor[]; // Latent rumors they satisfy
+  personality: string;
+}
+```
+
+### 14.4 Conversation & Rumor Discovery
+
+Interaction is a chat interface. The LLM acts as the NPC.
+**Constraint Discovery**:
+- Hidden State: The LLM instructions include "You know about a [Specific Rumor Context]".
+- Trigger: If the player asks the right questions, the LLM outputs a special `RUMOR_REVEALED` tag.
+- Result: The system captures the semantic tags and creates a "Rumor Card" in the player's journal.
+
+**Rumor Schema**:
+```typescript
+interface Rumor {
+  id: string;
+  title: string; // e.g. "The Whispering Mines"
+  description: string;
+  constraints: string[]; // e.g. ["theme:mines", "enemy:spiders", "reward:gemstones"]
+  difficulty: 'easy' | 'medium' | 'hard';
+}
+```
+
+### 14.5 Shop System
+
+- **Inventory**: JIT generated listing based on town level/theme.
+- **Economy**: Gold earned in dungeons.
+

@@ -174,7 +174,7 @@ function setupStateHandling() {
 
 function initTownMode(): void {
     console.log('[Mode] Switching to Town');
-    new TownInterface('town-container', (rumor: any) => {
+    const town = new TownInterface('town-container', (rumor: any) => {
         console.log('[Town] Starting dungeon from rumor:', rumor);
         // Store the rumor as the current quest
         currentQuest = {
@@ -183,6 +183,7 @@ function initTownMode(): void {
         };
         appState.switchScreen(GameScreen.Gameplay);
     });
+    town.init();
 }
 
 // ... initClassMode ...

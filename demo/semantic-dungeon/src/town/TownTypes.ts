@@ -38,6 +38,15 @@ export interface TemporalFact {
 
 export type Disposition = 'Hostile' | 'Cold' | 'Neutral' | 'Friendly' | 'Trusting';
 
+export interface ShopItem {
+    id: string;
+    name: string;
+    description: string;
+    cost: number;
+    rarity: 'Common' | 'Uncommon' | 'Rare' | 'Legendary';
+    tags: string[];
+}
+
 export interface NPC {
     id: string;
     archetype: string; // "Barkeep", "Merchant", "Mercenary"
@@ -46,14 +55,14 @@ export interface NPC {
      * Each fact has temporal metadata for TTL pruning.
      * e.g., { name: { value: "Grimshaw", collapsedOnDay: 1 }, mood: { value: "angry", collapsedOnDay: 3, ttlDays: 1 } }
      */
-    /**
-     * Progressive collapse - facts accumulate as revealed in narration.
-     * Each fact has temporal metadata for TTL pruning.
-     * e.g., { name: { value: "Grimshaw", collapsedOnDay: 1 }, mood: { value: "angry", collapsedOnDay: 3, ttlDays: 1 } }
-     */
     collapsedFacts: Record<string, TemporalFact>;
     /** Semantic disposition towards the player */
     disposition: Disposition;
+    /** Shop Inventory (Just-In-Time) */
+    shop?: {
+        inventory: ShopItem[];
+        lastRestockDay: number;
+    };
     // What they know (latent until revealed)
     knowledge: Rumor[];
     // Dialogue history
@@ -85,7 +94,10 @@ export type TownEventType =
     | 'DAY_EVENTS_COLLAPSED'
     | 'NPC_ARRIVED'
     | 'NPC_DEPARTED'
-    | 'NPC_DISPOSITION_CHANGE';
+    | 'NPC_DISPOSITION_CHANGE'
+    | 'SHOP_RESTOCKED'
+    | 'ITEM_BOUGHT'
+    | 'ITEM_SOLD';
 
 /** Event log entry for SSR compliance */
 export interface TownEvent {

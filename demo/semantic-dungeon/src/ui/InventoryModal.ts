@@ -97,6 +97,25 @@ export function initInventoryModal(): void {
             handleUnequip(slotName);
         });
     });
+
+    // Bind Keyboard Close
+    document.addEventListener('keydown', (e) => {
+        if (!state.isOpen) return;
+
+        // Close on ESC
+        if (e.key === 'Escape') {
+            closeInventoryModal();
+            return;
+        }
+
+        // Close on 'I' (Toggle behavior)
+        if (e.key.toLowerCase() === 'i') {
+            // Check if typing in input
+            if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+
+            closeInventoryModal();
+        }
+    });
 }
 
 export function openInventoryModal(player: PlayerState, onClose: () => void): void {

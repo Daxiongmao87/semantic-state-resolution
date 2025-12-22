@@ -343,6 +343,32 @@
 
 ---
 
+## Phase 8: Town & Rumor Loop
+
+**Goal**: Implement the Meta-Game Loop (Town -> Rumor -> Dungeon).
+
+### Tasks
+
+#### 8.1 Town Hub UI
+- Main Menu (Tavern, Shop, Gate)
+- Background styling (ASCII or simple CSS)
+
+#### 8.2 NPC & Conversation System
+- `NPCGenerator`: JIT generation of NPCs
+- `DialogueManager`: Chat interface with LLM
+- `RumorExtraction`: Parsing `RUMOR_REVEALED` tags
+
+#### 8.3 Rumor System
+- `RumorStore`: Tracking discovered rumors
+- Gate Menu: Inspect and Select Rumor to start Dungeon
+
+#### 8.4 Integration
+- Update Game Loop to start in Town (post-Character Gen)
+- Dungeon Generation now accepts `Rumor` constraints
+
+
+---
+
 ## Implementation Order Summary
 
 | Phase | Focus | Key Deliverable |
