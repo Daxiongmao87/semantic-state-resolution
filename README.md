@@ -7,17 +7,18 @@
 **Status:** Architectural Standard v1.0  
 **License:** MIT
 
-## 0. Project Framing
+## 0. Component Framing
 
-- This repository defines a fully fledged role-playing application built for 2014 D&D 5e SRD / SRD 5.1 compatibility.
-- The backend is authoritative for canonical state, SRD mechanics, constraints, and event-sourced persistence.
-- A LAN-accessible validation UI is required to submit intents, inspect projections, replay scenarios, and review hidden-state behavior.
-- The LLM is an AI DM-like proposer/interpreter: it narrates scenes, voices NPCs/world prose, and interprets free-text mechanics into structured proposals.
-- Symbolic logic is the final authority for hard mechanics, including combat math, saves, conditions, movement, rests, spells, inventory, encounter state, and time.
+- This repository/component documents Semantic State Resolution (SSR), an architectural component used by the main RPG project.
+- SSR is not the whole project and does not own the main project's definition of done.
+- The main project is a fully fledged role-playing application built for 2014 D&D 5e SRD / SRD 5.1 compatibility.
+- When checked out inside the main project, root-level acceptance criteria live at `../DEFINITION_OF_DONE.md`.
+- SSR supports canonical state, event-sourced persistence, latent entity collapse, constraint/provenance tracking, and no-retcon behavior.
+- Symbolic game logic remains the final authority for hard mechanics; the LLM proposes and interprets but does not directly mutate canonical state.
 
 ## 1. Executive Summary
 
-This repository documents a backend-first, 2014 D&D 5e SRD-compatible role-playing engine built on Semantic State Resolution (SSR). The project goal is a complete RPG adjudication backend with no-retcon state and deterministic replay.
+This component documents Semantic State Resolution (SSR) for a backend-first, 2014 D&D 5e SRD-compatible role-playing engine. The main project goal is a complete RPG adjudication backend with no-retcon state and deterministic replay.
 
 Traditional game engines treat Narrative (Flavor Text, Visuals) and Systems (Stats, Mechanics) as separate domains. This separation leads to Ludonarrative Dissonance, where a sword described as "cursed" behaves identically to a standard iron blade.
 
