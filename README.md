@@ -7,13 +7,28 @@
 **Status:** Architectural Standard v1.0  
 **License:** MIT
 
+## 0. Project Framing
+
+- This repository defines a fully fledged role-playing application built for 2014 D&D 5e SRD / SRD 5.1 compatibility.
+- The backend is authoritative for canonical state, SRD mechanics, constraints, and event-sourced persistence.
+- A LAN-accessible validation UI is required to submit intents, inspect projections, replay scenarios, and review hidden-state behavior.
+- The LLM is an AI DM-like proposer/interpreter: it narrates scenes, voices NPCs/world prose, and interprets free-text mechanics into structured proposals.
+- Symbolic logic is the final authority for hard mechanics, including combat math, saves, conditions, movement, rests, spells, inventory, encounter state, and time.
+
 ## 1. Executive Summary
+
+This repository documents a backend-first, 2014 D&D 5e SRD-compatible role-playing engine built on Semantic State Resolution (SSR). The project goal is a complete RPG adjudication backend with no-retcon state and deterministic replay.
 
 Traditional game engines treat Narrative (Flavor Text, Visuals) and Systems (Stats, Mechanics) as separate domains. This separation leads to Ludonarrative Dissonance, where a sword described as "cursed" behaves identically to a standard iron blade.
 
 Semantic State Resolution (SSR) is a unified architecture that resolves this issue by treating narrative and mechanics as two views of the same canonical state, revealed progressively through observation.
 
-Unlike pure generative AI, SSR does not grant the Large Language Model (LLM) authority over the game state. Instead, the LLM acts as a Semantic Proposer within a strict, validated constraint-satisfaction loop. This ensures that while the content is infinite, the logic remains rigid, deterministic, and persistent.
+Unlike pure generative AI, SSR does not grant the Large Language Model (LLM) authority over the game state. The LLM is a DM-like proposer/interpreter that generates prose mechanics, NPC responses, and candidate entities/content under schema constraints.
+The symbolic engine performs authoritative validation and commits hard mechanics in alignment with SRD constraints.
+
+This architecture is no-retcon: every adjudicated turn, observation, time advance, or system action commits to event log and canonical projection before response.
+
+A LAN-reachable validation UI is required to exercise the engine and inspect projections; it must remain a non-authoritative client.
 
 ## 2. Problem Statement: The Three Traps
 

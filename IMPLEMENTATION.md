@@ -1,405 +1,225 @@
-# SSR Demo Implementation Plan
+# SSR RPG Engine Implementation Plan
 
-> **Strategy**: Prove SSR incrementally. Start with **Class Generation** (simpler, isolated system) to validate the LLM solver pipeline, then expand to **Dungeon Generation** (complex, interconnected system).
+## Objective
 
----
+Build a backend-authoritative D&D SRD 5.1 RPG engine with SRD-correct mechanics and SSR content collapse, then attach a LAN validation UI as a non-authoritative client.
 
-## Phase 0: Project Foundation
+## Phase 0: Engine Substrate
 
-**Goal**: Establish the development environment and core infrastructure.
+### Goal
 
-### Tasks
+Establish a strict TypeScript backend scaffold with API, module boundaries, and replay-safe persistence primitives.
 
-1. **Initialize Vite + TypeScript project**
-   - Location: `/demo/semantic-dungeon/`
-   - Configure strict TypeScript, ESLint, Prettier
+### Key work
 
-2. **Create core type definitions** (`src/types.ts`)
-   - Entity, EntityState, Constraint
-   - Component interfaces (placeholder, expand as needed)
-   - Event types for event sourcing
+1. Create canonical engine modules for state, constraints, events, and solver contracts.
+2. Define strict TypeScript types for:
+   - canonical entities
+   - latent/collapsed lifecycle
+   - event envelopes
+   - intent and proposal schemas
+3. Add deterministic seeded utilities for dice, random selection, and timestamps for testability.
+4. Stand up a minimal HTTP API surface for:
+   - session creation
+   - intent submission
+   - observation/query
+   - projection fetch
+   - time advance and replay
+5. Keep rendering and UI modules out of the engine boundary.
 
-3. **Implement Ollama client** (`src/solver/OllamaSolver.ts`)
-   - HTTP client for `http://192.168.87.121:11434`
-   - Model: `qwen2.5:7b`
-   - JSON mode for structured output
-   - Timeout handling
-   - Retry logic (configurable attempts)
+### Exit criteria
 
-4. **Implement basic Event Log** (`src/engine/EventLog.ts`)
-   - Append-only event store
-   - Event replay capability (for debugging)
+- API compiles and returns typed validation errors for invalid requests.
+- Engine modules are isolated from any UI assumptions.
+- Baseline session lifecycle is reproducible via seed and session id.
 
-### Exit Criteria
+## Phase 1: SRD Mechanics Kernel (Hard-Rules Authority)
 
-- [ ] `npm run dev` starts without errors
-- [ ] Ollama client successfully queries LLM and receives JSON response
-- [ ] Events can be recorded and replayed
+### Goal
 
----
+Make symbolic logic the single source of truth for mechanical resolution.
 
-## Phase 1: Class Generation (Fractal SSR Proof)
+### Key work
 
-**Goal**: Prove fractal constraint inheritance works. Player describes a class → LLM proposes names → player selects → LLM proposes abilities → LLM collapses ability properties.
+1. Implement deterministic routines for checks, saves, attack rolls, AC, HP/damage/healing, conditions, movement, rests, action economy, spells, inventory/equipment interactions, encounter state, and time.
+2. Model each mechanic outcome as event mutations, not direct mutations.
+3. Build rule validators that reject:
+   - out-of-range values
+   - contradictory outcomes
+   - illegal action ordering
+4. Expose a decision trace format for reproducibility.
 
-### Why First?
+### Exit criteria
 
-- **Isolated system**: No spatial relationships, no rendering complexity
-- **Validates core SSR loop**: Request → Propose → Validate → Commit
-- **Visible proof**: Player sees meaningful, coherent output immediately
-- **Fast iteration**: No game loop, no canvas, just forms and text
+- Every mechanical action route produces events and a projection update only through the mechanics kernel.
+- Unit checks for core SRD formulas pass with deterministic fixtures.
+- Invalid mechanic proposals are rejected with structured rejection reasons.
 
-### Tasks
+## Phase 2: Event Sourcing and Persistence
 
-#### 1.1 Class Name Collapse
+### Goal
 
-- **Input**: Player's free-text description (e.g., "A warrior who controls lightning")
-- **Process**:
-  1. Extract semantic tags from description
-  2. Send to LLM with `COLLAPSE_CLASS_NAMES` task
-  3. Validate response (3 names, strings, non-empty)
-  4. Commit `CollapseCommitted` event
-- **Output**: 3 suggested class names
+Guarantee replayability and no-retcon continuity.
 
-#### 1.2 Ability Collapse
+### Key work
 
-- **Input**: Selected class name + inherited constraints
-- **Process**:
-  1. Build context with class name, inherited tags
-  2. Send to LLM with `COLLAPSE_ABILITIES` task
-  3. Validate response (3 abilities with names and categories)
-  4. Commit event
-- **Output**: 3 abilities with categories
+1. Implement append-only event log schema and writer.
+2. Implement projection builder that folds events into canonical session state.
+3. Implement snapshot + replay CLI/API for load and verification.
+4. Ensure every accepted intent, observation, time advance, and system action writes at least one event before response.
+5. Add audit tables/markers for collapse provenance and rejection reasons.
 
-#### 1.3 Ability Property Collapse
+### Exit criteria
 
-- **Input**: Ability name + class context + inherited constraints
-- **Process**:
-  1. Build context with ability, class, constraints
-  2. Send to LLM with `COLLAPSE_ABILITY_PROPERTIES` task
-  3. Validate response (properties from whitelist, numeric values in range)
-  4. Commit event
-- **Output**: Property dictionary for each ability
+- A replay from event log recreates equivalent canonical state.
+- No accepted user-facing response without prior event commit.
+- Event stream supports deterministic rehydration in tests and UI inspection tools.
 
-#### 1.4 UI for Class Generation
+## Phase 3: SSR Resolution Engine
 
-- Simple HTML form:
-  - Text input for class description
-  - Button to generate names
-  - Radio buttons to select name
-  - Display abilities
-  - Display ability properties
-- No Canvas required
+### Goal
 
-### Exit Criteria
+Resolve latent content through constrained proposal + validation loops.
 
-- [ ] Full flow works: description → names → abilities → properties
-- [ ] Each step commits events to Event Log
-- [ ] Constraint inheritance is visible (lightning class → lightning abilities)
-- [ ] Invalid LLM responses are caught and retried
-- [ ] User can complete class generation without errors
+### Key work
 
----
+1. Implement an SSR orchestrator:
+   - build constraints from neighboring state and campaign context
+   - request proposal from LLM adapter
+   - validate against schema, whitelists, SRD constraints, and canonical consistency
+   - commit resolution event on success
+2. Implement entity lifecycle states and transitions:
+   - latent
+   - proposing
+   - collapsed
+3. Add deterministic fallback behavior for proposal failures (schema-safe local defaults, not front-end heuristics).
 
-## Phase 2: Core SSR Engine
+### Exit criteria
 
-**Goal**: Build the reusable engine components needed for dungeon generation.
+- Latent entities can only enter collapsed state through validated proposal events.
+- Constraint propagation records sources and confidence for downstream resolution.
+- Fallback does not consume hidden state authority from the UI.
 
-### Tasks
+## Phase 4: LLM DM Adapter (Proposer / Interpreter)
 
-#### 2.1 Entity Store (`src/engine/EntityStore.ts`)
+### Goal
 
-- Create/read/update entities
-- Track entity state (latent/collapsing/collapsed)
-- Query entities by state, location, type
+Provide provider-neutral, configurable LLM entry points for:
 
-#### 2.2 Constraint Store (`src/engine/ConstraintStore.ts`)
+- narrative/prose generation
+- content proposal
+- intent interpretation from player prose
 
-- Store constraints per entity
-- Support hard/soft constraint types
-- Prune soft constraints below strength threshold
-- Query constraints for entity
+### Key work
 
-#### 2.3 SSR Engine (`src/engine/SSREngine.ts`)
+1. Add OpenAI-compatible provider adapter with configurable base URL and model.
+2. Add schema-constrained prompting and strict JSON extraction.
+3. Add retry/failure paths and telemetry fields on proposal attempts.
+4. Add adapter isolation so no game-rule logic exists in prompt handlers.
 
-- Orchestrate collapse flow:
-  1. Build request (context, constraints, whitelist)
-  2. Call solver (OllamaSolver)
-  3. Validate response (schema, whitelist, ranges)
-  4. Commit event (EventLog)
-  5. Update entity state (EntityStore)
-  6. Propagate constraints to neighbors (ConstraintStore)
+### Exit criteria
 
-#### 2.4 WFC Fallback (`src/solver/WFCFallback.ts`)
+- Provider adapter can be swapped without changing rule adjudication modules.
+- All LLM outputs are machine-validated before any state transition.
+- No adapter directly writes canonical state.
 
-- Traditional WFC implementation
-- Pre-defined adjacency rules
-- Deterministic selection via hash
-- Used when LLM fails after retries
+## Phase 5: Prose Intent Parsing and Mechanical Interpretation
 
-### Exit Criteria
+### Goal
 
-- [ ] Entities can transition through state machine
-- [ ] Constraints propagate correctly
-- [ ] Engine correctly orchestrates collapse
-- [ ] Fallback produces valid output when LLM fails
+Transform player prose into valid engine intents and mechanical action payloads.
 
----
+### Key work
 
-## Phase 3: Dungeon Layout (BSP + Rendering)
+1. Define intent schema for movement, combat actions, social actions, object interaction, rest, and narration.
+2. Use the LLM interpreter to parse prose into this schema.
+3. Route all interpreted intents through the mechanics kernel before commit.
+4. Preserve unresolved or ambiguous interpretation as structured clarification requests, not implicit state changes.
 
-**Goal**: Generate and render a navigable dungeon with rooms connected by doors.
+### Exit criteria
 
-### Tasks
+- Free-text input is converted into canonical intent form or rejected with recovery prompt.
+- Ambiguous prose cannot trigger hard-mechanic effects.
+- Mechanically meaningful prose is replay-safe and deterministic after commit.
 
-#### 3.1 BSP Generator (`src/dungeon/BSPGenerator.ts`)
+## Phase 6: Gameplay Loop and World Orchestration
 
-- Recursively partition dungeon space
-- Create room bounds in each leaf node
-- Connect adjacent rooms with doors
-- Output: List of latent room entities with dimensions and neighbors
+### Goal
 
-#### 3.2 Grid Renderer (`src/render/GridRenderer.ts`)
+Wire one loop that accepts intent, resolves mechanics/content, advances time, and returns projection + prose.
 
-- Canvas 2D rendering
-- Draw rooms (floor tiles)
-- Draw walls (room boundaries)
-- Draw doors (connections)
-- Draw player position
+### Key work
 
-#### 3.3 Room Entity (`src/dungeon/RoomEntity.ts`)
+1. Implement a single loop coordinator:
+   - accept intent
+   - interpret / parse
+   - resolve mechanical and SSR needs
+   - persist events
+   - emit player-facing projection and narration
+2. Add deterministic turn boundaries and initiative/action budgeting.
+3. Track encounter state, turn sequencing, and time passage as event updates.
 
-- Room as SSR entity
-- Latent: only position, dimensions, neighbors
-- Collapsed: type, theme, description, objects, monsters
+### Exit criteria
 
-#### 3.4 Basic Navigation
+- Every turn in a session has explicit start/end event markers.
+- Engine enforces action economy and encounter constraints.
+- Prose responses always correspond to committed symbolic outcomes.
 
-- Player starts in entrance room
-- Arrow keys move player
-- Player cannot walk through walls
-- Can walk through doors to connected rooms
+## Phase 7: Content Collapse Systems
 
-### Exit Criteria
+### Goal
 
-- [ ] BSP generates valid dungeon layout
-- [ ] Dungeon renders correctly on canvas
-- [ ] Player can navigate between rooms via doors
-- [ ] All rooms start as latent entities
+Collapse story-facing content while preserving hard mechanics binding.
 
----
+### Key work
 
-## Phase 4: Horizon Lookahead (+2 Async)
+1. Add content domains: monster/NPC/location/treasure/rumor/equipment proposal schemas.
+2. Build per-domain whitelists and provenance tracking.
+3. Validate every proposed content proposal before commit (no direct injection).
+4. Keep content changes reversible only through new events, not silent mutation.
 
-**Goal**: Pre-collapse rooms at depth ≤ 2 from player to hide LLM latency.
+### Exit criteria
 
-### Tasks
+- Content domains resolve through SSR contracts and are reflected in projections.
+- Mechanical representation of content (if any) is linked to canonical components and SRD rules.
 
-#### 4.1 Horizon Queue (`src/engine/HorizonQueue.ts`)
+## Phase 8: LAN Validation UI (Client)
 
-- Track player position
-- Calculate rooms at depth 0, 1, 2
-- Prioritize by depth (lower = higher priority)
-- Rate limit concurrent LLM calls (max 2)
+### Goal
 
-#### 4.2 Async Collapse Worker
+Provide an internal LAN-accessible debugging and validation surface without engine authority.
 
-- Background worker processes queue
-- Calls SSREngine.collapse() for each entity
-- Updates entity state on completion
+### Key work
 
-#### 4.3 Pause-and-Wait
+1. Build a UI to:
+   - start/load sessions
+   - submit intents and observations
+   - replay event logs
+   - inspect projections and hidden state boundaries
+2. Keep all rule calculations server-side.
+3. Include debug views for rejections, retries, and deterministic seeds.
 
-- When player enters room that is:
-  - **Collapsed**: Proceed normally
-  - **Collapsing**: Pause game, show loading indicator, wait
-  - **Latent**: Add to queue with high priority, pause, wait
-- Resume when collapse completes
+### Exit criteria
 
-### Exit Criteria
+- UI can reproduce reported bugs by replaying saved event logs.
+- UI cannot apply hidden-state logic outside backend responses.
 
-- [ ] Rooms pre-collapse as player approaches
-- [ ] Normal movement speed never triggers pause
-- [ ] Fast movement correctly pauses and waits
-- [ ] Debug overlay shows queue status
+## Phase 9: Acceptance Validation
 
----
+### Goal
 
-## Phase 5: Room Semantic Collapse
+Prove conformance to the SRD-backed, no-retcon engine contract.
 
-**Goal**: LLM determines room type, theme, objects, and monsters based on quest + neighbor constraints.
+### Required checks
 
-### Tasks
+- Replay and load consistency tests
+- Canonical mechanics validation (checks, saves, combat flow, movement, rests, conditions)
+- Deterministic intent parsing and proposal validation tests
+- Hidden-state collapse invariants and no-retcon audits
+- Multi-run uniqueness checks for high-level generated sessions
+- LAN validation UI scenario tests (scenario submit/observe/replay)
 
-#### 5.1 Quest Generation
+### Release criteria
 
-- Generate quest at dungeon start
-- Quest provides hard constraints for rooms
-- Quest types: retrieve_artifact, rescue_captive, defeat_boss, etc.
-
-#### 5.2 Room Collapse Schema
-
-- Implement `COLLAPSE_ROOM` solver request
-- Include: quest context, neighbor states, constraints
-- Whitelist: room_types, themes
-
-#### 5.3 Constraint Propagation
-
-- When room collapses, inject constraints to neighbors
-- Example: "damp" room → neighbors get "adjacent_water" soft constraint
-
-#### 5.4 Object/Monster Generation
-
-- Room collapse includes object and monster lists
-- Objects and monsters created as latent entities
-- Positioned within room bounds
-
-### Exit Criteria
-
-- [ ] Rooms collapse with coherent themes
-- [ ] Quest constraints influence room types
-- [ ] Neighbor constraints propagate correctly
-- [ ] Objects and monsters spawn in rooms
-
----
-
-## Phase 6: Object Interaction
-
-**Goal**: Player can inspect and interact with objects. Objects collapse progressively.
-
-### Tasks
-
-#### 6.1 Interaction System (`src/player/InteractionSystem.ts`)
-
-- Calculate interaction tile (direction player is facing)
-- Identify entity at tile
-- Handle interaction input
-
-#### 6.2 Progressive Object Collapse
-
-- **Inspect**: Collapse visual description
-- **Interact**: Parse player input, LLM interprets action, collapse result
-
-#### 6.3 Interaction Validation
-
-- Whitelist of valid actions
-- LLM proposes action from whitelist
-- Engine validates before committing
-
-#### 6.4 Wall/Floor Inspection
-
-- Walls and floors can be inspected
-- LLM generates contextual descriptions
-
-### Exit Criteria
-
-- [ ] Player can inspect objects, walls, floors
-- [ ] Objects collapse progressively
-- [ ] Free-form input correctly interpreted
-- [ ] Invalid actions rejected
-
----
-
-## Phase 7: Polish & Integration
-
-**Goal**: Complete the demo with UI, debug tools, and final integration.
-
-### Tasks
-
-#### 7.1 Full UI Layout
-
-- Quest display
-- Player stats and class
-- Interaction log
-- Interaction prompt
-
-#### 7.2 Debug Overlay
-
-- Entity state counts
-- Horizon queue status
-- Constraint graph visualization
-- LLM latency metrics
-- Event log tail
-
-#### 7.3 Class → Dungeon Integration
-
-- Class generation happens before dungeon entry
-- Player class available during dungeon
-- (Combat out of scope for MVP)
-
-#### 7.4 Error Handling & Edge Cases
-
-- Network failures
-- LLM timeouts
-- Invalid responses after all retries
-- Fallback to WFC gracefully
-
-### Exit Criteria
-
-- [ ] Complete flow: describe class → enter dungeon → explore → interact
-- [ ] Debug overlay functional
-- [ ] Graceful error handling
-- [ ] Demo is presentable
-
----
-
-## Phase 8: Town & Rumor Loop
-
-**Goal**: Implement the Meta-Game Loop (Town -> Rumor -> Dungeon).
-
-### Tasks
-
-#### 8.1 Town Hub UI
-- Main Menu (Tavern, Shop, Gate)
-- Background styling (ASCII or simple CSS)
-
-#### 8.2 NPC & Conversation System
-- `NPCGenerator`: JIT generation of NPCs
-- `DialogueManager`: Chat interface with LLM
-- `RumorExtraction`: Parsing `RUMOR_REVEALED` tags
-
-#### 8.3 Rumor System
-- `RumorStore`: Tracking discovered rumors
-- Gate Menu: Inspect and Select Rumor to start Dungeon
-
-#### 8.4 Integration
-- Update Game Loop to start in Town (post-Character Gen)
-- Dungeon Generation now accepts `Rumor` constraints
-
-
----
-
-## Implementation Order Summary
-
-| Phase | Focus | Key Deliverable |
-|-------|-------|-----------------|
-| 0 | Foundation | Working project + Ollama client |
-| 1 | Class Generation | Full fractal collapse flow |
-| 2 | Core Engine | Reusable SSR components |
-| 3 | Dungeon Layout | BSP + Rendering + Navigation |
-| 4 | Horizon Lookahead | Latency hiding with +2 async |
-| 5 | Room Collapse | Semantic rooms with propagation |
-| 6 | Object Interaction | Progressive collapse + free-form input |
-| 7 | Polish | UI + Debug + Integration |
-
----
-
-## Milestones
-
-### Milestone 1: "SSR Works" (Phase 0-1)
-> Player describes a class, LLM generates coherent names/abilities/properties with visible constraint inheritance.
-
-### Milestone 2: "Dungeon Exists" (Phase 2-3)
-> Navigable BSP dungeon renders, rooms are latent entities.
-
-### Milestone 3: "Latency Hidden" (Phase 4)
-> Horizon +2 pre-collapses rooms, player never waits during normal play.
-
-### Milestone 4: "Semantic Dungeon" (Phase 5)
-> Rooms have coherent themes based on quest and neighbors.
-
-### Milestone 5: "Interactive World" (Phase 6)
-> Objects collapse progressively, player can interact with anything.
-
-### Milestone 6: "Demo Complete" (Phase 7)
-> Polished, presentable proof of SSR.
+- The system performs repeated games with materially diverse sessions while retaining canonical continuity and replay equivalence.
+- Mechanic outcomes remain SRD-compatible and fully attributed to symbolic adjudication events.
