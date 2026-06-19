@@ -27,7 +27,9 @@ Establish a strict TypeScript backend scaffold with API, module boundaries, repl
 4. Stand up a minimal HTTP API surface for:
    - session/context creation,
    - intent submission,
+   - system event submission,
    - observation/query,
+   - event log fetch,
    - projection fetch,
    - property index fetch,
    - neighbor index fetch,

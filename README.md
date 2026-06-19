@@ -160,6 +160,7 @@ interface SSRProperty {
   value?: unknown;
   validator_id?: string;
   whitelist_id?: string;
+  visibility_scope?: string;
   source_event_id: string;
 }
 ```
