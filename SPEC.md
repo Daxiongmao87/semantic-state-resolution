@@ -1,145 +1,271 @@
-# SSR RPG Engine Specification
+# SSR Core Specification
 
-## 1) Scope and Engine Goal
+## 1) Scope and Architecture Goal
 
-This is a specification for a backend-first RPG engine that is compatible with the 2014 D&D 5e SRD and SRD 5.1.
-A full role-playing system is required, with full rules coverage and deterministic state persistence.
-A LAN-accessible validation UI is required for gameplay simulation, projection inspection, and replay.
+Semantic State Resolution (SSR) is a domain-general architecture for converting latent, partially known, or semantically ambiguous state into canonical, replayable, provenance-backed state.
+
+SSR Core is not limited to games or any single application domain. Domain-specific systems provide profiles that define schemas, rule kernels, validators, whitelists, projection formats, authority boundaries, and domain event types.
+
+A complete SSR implementation must provide:
+
+- canonical state projection,
+- replay-safe event sourcing,
+- latent entity handling,
+- property-level collapse,
+- omnidimensional neighbor indexing,
+- constraint and provenance tracking,
+- proposal validation,
+- deterministic fallback behavior,
+- no-retcon state transitions,
+- inspection tooling for projections, events, rejections, and replay.
 
 ## 2) Roles and Authority Boundaries
 
-### 2.1 LLM Role
+### 2.1 Proposal / Interpretation Role
 
-- The LLM is a DM-like proposer/interpreter.
-- It is responsible for:
-  - Natural language scene narration.
-  - NPC and world prose generation.
-  - Interpreting player prose into structured intents.
-  - Suggesting latent content proposals (entities, rumors, descriptions, affordances).
-- It does **not** hold rules authority and does **not** directly mutate canonical state.
+A model, rules assistant, human operator, or other proposal source may act as a proposer/interpreter.
+
+It may be responsible for:
+
+- natural language explanation,
+- content or property proposals,
+- interpreting prose or ambiguous input into structured intents,
+- suggesting candidate facts, labels, affordances, classifications, or derived properties,
+- summarizing canonical state for user-facing projection.
+
+It does **not** hold canonical authority and does **not** directly mutate canonical state.
 
 ### 2.2 Symbolic Engine Role
 
-- The symbolic logic layer is the sole authority for hard mechanics and state transitions:
-  - Checks and saving throws
-  - Attacks and AC
-  - HP, damage, healing, and death logic
-  - Conditions
-  - Movement and line-of-effect constraints
-  - Action economy
-  - Rest mechanics
-  - Spell and equipment interactions
-  - Encounter state
-  - Time and duration
-- All game updates must pass this adjudication layer before commit.
+The symbolic logic layer is the sole authority for hard rules and state transitions. Depending on the domain profile, this includes:
 
-## 3) Hard Mechanics vs Content Model
+- schema validation,
+- allowed value enforcement,
+- action legality,
+- authorization and visibility,
+- dependency consistency,
+- lifecycle transitions,
+- timing and duration,
+- numeric calculation,
+- policy/rule compatibility,
+- conflict handling,
+- event commit.
 
-- **Hard mechanics (binding):** All above rules are authoritative SRD behavior and cannot be overridden by prose output.
-- **Content (collapsible):** Monsters, NPC facts, locations, rumors, items, treasure, causes, and similar world content may begin latent and resolve through SSR proposals.
-- **Constraint coupling:** Content proposals are valid only after symbolic validation against constraints and SRD mechanics compatibility.
+All state updates must pass this adjudication layer before commit.
+
+## 3) Hard Rules vs Collapsible Content
+
+- **Hard rules (binding):** Domain rule kernels and validation contracts cannot be overridden by prose or proposal output.
+- **Collapsible content:** Entities, properties, facts, labels, summaries, classifications, explanations, affordances, relationships, and similar semantic state may begin latent and resolve through SSR proposals.
+- **Constraint coupling:** Proposals are valid only after symbolic validation against constraints, domain rules, authority scope, and canonical consistency.
 
 ## 4) Canonical State and Persistence
 
-- Canonical state is the game truth source.
-- Every accepted action must append to the event log and update canonical projections before returning player-facing output.
-- The event log is replayable.
+- The event log is the source of truth.
+- Canonical state is a projection derived from the event log.
+- Every accepted action, observation, collapse, system event, property update, and correction must append to the event log before affecting canonical projection.
 - Replay/load must reproduce the same canonical projection and derived state.
-- No-retcon is mandatory: resolved facts cannot be silently invalidated by later LLM output.
+- No-retcon is mandatory: resolved facts and properties cannot be silently invalidated by later proposal output.
 
-## 5) Gameplay Contracts
+## 5) Entity and Property Model
 
-### 5.1 Intents and Prose Parsing
+### 5.1 Entity Handles
 
-- Player input arrives as free-form text.
-- The LLM maps it to `Intent` JSON constrained by schema:
-  - `action`: structured verb set
-  - `targetIds`
-  - `context` (speaker, location, session step)
-  - `mechanicHints` (attack/skill/check intent)
-  - `prose` (optional narration channel)
-- Mechanical actions must be validated by the symbolic layer before applying effects.
+An entity is a stable canonical handle. It does not need all properties resolved at creation time.
 
-### 5.2 SSR Collapse and Proposal Contracts
+Required entity-level metadata:
 
-- Latent entities resolve only through proposal + validation flow:
-  1. engine builds constrained proposal request
-  2. LLM proposes candidate content under allow-lists
-  3. engine validates constraints, ranges, and canonical consistency
-  4. engine commits resolved entity state or rejects with corrective event
+- entity ID,
+- lifecycle state,
+- type/profile tag where required,
+- provenance,
+- visibility scope,
+- indexed property references,
+- constraint references,
+- source event ID.
 
-### 5.3 Observation and Projection
+### 5.2 Collapsible Indexed Properties
 
-- Observation requests query current visible or derivable state.
-- Projections can omit hidden latent details and expose only what the UI/player is authorized or positioned to see.
+Properties are first-class collapsible units. A property may be latent while its parent entity is canonical.
 
-## 6) Backend API Requirements
+Property states:
+
+- `latent`
+- `proposing`
+- `collapsed`
+- `rejected`
+- `obsolete`
+- `canonical`
+
+Property namespaces may include:
+
+- `mechanic`
+- `semantic`
+- `sensory`
+- `social`
+- `spatial`
+- `temporal`
+- `narrative`
+- `affordance`
+- `provenance`
+
+Property authority levels may include:
+
+- `kernel`
+- `canonical`
+- `hard_constraint`
+- `soft_constraint`
+- `rumor`
+- `belief`
+- `proposal`
+
+### 5.3 Property Collapse Rule
+
+A property value may collapse only through proposal plus validation, deterministic fallback plus validation, or direct symbolic rule resolution.
+
+Once committed, the property may change only through a recorded delta or correction event.
+
+### 5.4 Kernel Boundary
+
+SSR may remove hard-coded content fields, but it must not remove hard-coded authority contracts.
+
+The engine must still define property metadata, allowed namespaces, lifecycle states, validators, whitelist bindings, visibility rules, event schemas, provenance fields, and rule authority.
+
+## 6) Omnidimensional Neighbors
+
+### 6.1 Definition
+
+An omnidimensional neighbor is a typed, scoped, weighted relationship that can legitimately influence the resolution of an entity or property.
+
+Neighbor dimensions may include:
+
+- `spatial`
+- `temporal`
+- `causal`
+- `semantic`
+- `mechanical`
+- `social`
+- `epistemic`
+- `provenance`
+- `affordance`
+- `narrative`
+
+A neighbor is therefore not only an adjacent node. It is any admissible source of constraint pressure.
+
+### 6.2 Neighbor Authority Rule
+
+Omnidimensional neighbors feed the constraint graph. They do not bypass validation and do not expand proposer authority.
+
+Neighbor influence must be:
+
+- typed,
+- scoped,
+- weighted,
+- provenance-backed,
+- replayable,
+- filtered by visibility and authority,
+- converted into hard or soft constraints before proposal,
+- validated before commit.
+
+### 6.3 Neighbor Edge Record
+
+```ts
+interface OmnidimensionalNeighborEdge {
+  id: string;
+  target_ref: { kind: "entity" | "property"; id: string };
+  source_ref: { kind: string; id: string };
+  dimension: string;
+  relation: string;
+  authority: string;
+  strength: number;
+  ttl?: number;
+  source_event_id: string;
+}
+```
+
+## 7) Observation and Projection
+
+Observation requests query current visible, authorized, or derivable state.
+
+Projection rules:
+
+- projections may omit hidden latent details,
+- projections expose only what the current actor or subsystem is authorized to see,
+- observation may trigger property collapse when required by the response contract,
+- observation must not leak hidden state through explanation text,
+- any collapse caused by observation must be event-backed.
+
+## 8) Backend API Requirements
 
 The backend must provide at least:
 
-- `POST /sessions` — create session and canonical world seed
-- `POST /sessions/{id}/intents` — submit free-form or structured player intent
-- `POST /sessions/{id}/observations` — submit observation requests
-- `POST /sessions/{id}/advance-time` — explicit time-step advancement
-- `GET /sessions/{id}/projection` — safe player-facing view for UI
-- `GET /sessions/{id}/replay` — event-log replay output
-- `POST /sessions/{id}/system-events` — deterministic system actions (rest, traps, scripted milestones)
+- `POST /sessions` or domain-equivalent context creation,
+- `POST /sessions/{id}/intents` or structured action submission,
+- `POST /sessions/{id}/observations`,
+- `POST /sessions/{id}/advance-time` or domain-equivalent clock advancement where applicable,
+- `GET /sessions/{id}/projection`,
+- `GET /sessions/{id}/replay`,
+- `POST /sessions/{id}/system-events`,
+- `GET /sessions/{id}/events`,
+- `GET /sessions/{id}/properties`,
+- `GET /sessions/{id}/neighbors`.
 
-### Response contract
+### Response Contract
 
 Responses must include:
 
-- Updated projection delta
-- Validation result with canonical engine verdict
-- Emitted events and event ids
-- Any narration/prose for LLM output channels
+- updated projection delta,
+- validation result with canonical engine verdict,
+- emitted events and event IDs,
+- rejection reasons where applicable,
+- any explanation or prose for proposal-output channels.
 
-### Frontend/UI contract
+### Client / UI Contract
 
-- LAN validation UI is non-authoritative.
-- It may inspect projections, submit intents/observations, and render diagnostics.
-- It must not interpret or apply hard mechanics independently of the engine.
+Inspection tooling and validation UIs are non-authoritative.
 
-## 7) Whitelists and Controlled Generation
+They may inspect projections, submit intents/observations, and render diagnostics. They must not interpret or apply hard rules independently of the engine.
 
-The engine uses bounded, versioned whitelists for generated IDs and IDs/terms to prevent unscoped expansion.
+## 9) Whitelists and Controlled Generation
+
+The engine uses bounded, versioned whitelists for generated IDs, property values, labels, status values, action IDs, and domain terms.
+
+Example:
 
 ```ts
-export const MONSTER_TYPES = [
-  "skeleton",
-  "zombie",
-  "ghost",
-  "spider",
-  "rat_swarm",
-  "goblin",
-  "orc",
-  "troll",
-  "stone_guardian",
-  "elemental",
-  "slime",
-  "bat_swarm",
-  "cultist",
-  "wraith",
-  "dragon",
-  "demon",
+export const STATUS_IDS = [
+  "unknown",
+  "pending",
+  "validated",
+  "rejected",
+  "obsolete",
 ] as const;
 ```
 
 Any whitelist miss is a validation error that prevents commit.
 
-## 8) Determinism and Validation
+## 10) Determinism and Validation
 
-- All random outcomes and tie-breaks must use deterministic seeds for deterministic replay per session seed.
-- All generated numbers and timings used for mechanics must be recorded in the event stream.
+- All random outcomes, tie-breaks, fallbacks, and deterministic selections must use replayable seeds or event-recorded values.
+- All generated numbers and timings used by hard rules must be recorded in the event stream.
+- Neighbor selection must be deterministic or event-recorded.
+- Property collapse decisions must record provenance.
 - Tests and verification must validate:
-  - hard mechanics parity with SRD assumptions,
+  - hard rule parity for the active domain profile,
   - persistence and replay invariance,
-  - LLM proposal schema/whitelist conformance,
-  - separation of prose generation from mechanic authority.
+  - proposal schema and whitelist conformance,
+  - separation of proposal output from canonical authority,
+  - no-retcon behavior,
+  - property-level collapse invariants,
+  - omnidimensional neighbor filtering and precedence.
 
-## 9) Rejected Architecture Patterns
+## 11) Rejected Architecture Patterns
 
+- Domain-specific scope baked into SSR Core.
 - Frontend-owned rules authority.
 - Silent hidden-state mutation.
-- LLM direct canonical writes.
+- Proposal system direct canonical writes.
+- Unbounded neighbor influence.
+- Property collapse without validators or provenance.
+- Non-replayable relevance scoring.
 - Prototype-only flows that stop at isolated tasks without full loop.
