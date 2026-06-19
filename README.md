@@ -335,7 +335,8 @@ The corrected architectural thesis is:
   },
   "whitelist": {
     "status_ids": ["unknown", "pending", "validated", "rejected", "obsolete"],
-    "action_ids": ["request_evidence", "mark_conflict", "commit_status"]
+    "action_ids": ["request_evidence", "mark_conflict", "commit_status"],
+    "tag_ids": ["needs_evidence"]
   }
 }
 ```
