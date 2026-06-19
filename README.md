@@ -336,15 +336,23 @@ The corrected architectural thesis is:
   "schema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
-    "required": ["property_id", "proposed_value"],
+    "required": ["request_id", "proposal"],
     "properties": {
-      "property_id": { "type": "string" },
-      "proposed_value": { "type": ["string", "number", "boolean", "object", "array", "null"] },
-      "tags": {
-        "type": "array",
-        "items": { "type": "string" }
-      },
-      "explanation": { "type": "string" }
+      "request_id": { "type": "string" },
+      "proposal": {
+        "type": "object",
+        "required": ["property_id", "proposed_value"],
+        "properties": {
+          "property_id": { "type": "string" },
+          "proposed_value": { "type": ["string", "number", "boolean", "object", "array", "null"] },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "explanation": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
     },
     "additionalProperties": false
   },
