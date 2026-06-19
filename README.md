@@ -333,6 +333,28 @@ The corrected architectural thesis is:
     "hard": [],
     "soft": []
   },
+  "schema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "required": ["property_id", "proposed_value"],
+    "properties": {
+      "property_id": { "type": "string" },
+      "proposed_value": { "type": ["string", "number", "boolean", "object", "array", "null"] },
+      "tags": {
+        "type": "array",
+        "items": { "type": "string" }
+      },
+      "explanation": { "type": "string" }
+    },
+    "additionalProperties": false
+  },
+  "authority_scope": {
+    "requesting_actor": "kernel.resolution_engine",
+    "requesting_subsystem": "proposal_pipeline",
+    "visibility_scope": ["resolver", "auditor", "authorized_observer"],
+    "proposal_authority": "proposal",
+    "context_authority_levels": ["kernel", "hard_constraint", "soft_constraint"]
+  },
   "whitelist": {
     "status_ids": ["unknown", "pending", "validated", "rejected", "obsolete"],
     "action_ids": ["request_evidence", "mark_conflict", "commit_status"],

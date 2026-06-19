@@ -174,14 +174,31 @@ interface OmnidimensionalNeighborEdge {
   id: string;
   target_ref: { kind: "entity" | "property"; id: string };
   source_ref: { kind: string; id: string };
-  dimension: string;
+  dimension: NeighborDimensionRef;
   relation: string;
-  authority: string;
+  authority: NeighborAuthorityRef;
   strength: number;
   ttl?: number;
   source_event_id: string;
 }
+
+type ProfileRegistryRef = {
+  registry_id: string;
+  profile_id: string;
+  profile_version: string;
+  entry_id: string;
+};
+
+type NeighborDimensionRef = ProfileRegistryRef & {
+  registry_id: "neighbor_dimensions_v1";
+};
+
+type NeighborAuthorityRef = ProfileRegistryRef & {
+  registry_id: "authority_levels_v1";
+};
 ```
+
+Implementations MUST resolve both `NeighborDimensionRef` and `NeighborAuthorityRef` against the active `ProfileRegistry` before persistence or use; unknown `registry_id` / `profile_id` / `profile_version` / `entry_id` combinations are validation errors.
 
 ## 7) Observation and Projection
 
