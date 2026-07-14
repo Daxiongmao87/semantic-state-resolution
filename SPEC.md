@@ -84,7 +84,8 @@ For this demonstrator, a LAN-accessible validation UI is required for gameplay s
 
 - Observation requests query current visible or derivable state and identify the facets needed by the query.
 - Projections can omit hidden latent details and expose only what the UI/player is authorized or positioned to see.
-- Interaction range determines what may trigger resolution; projection authorization separately determines what the querying observer receives.
+- Interaction scope determines what may trigger resolution; projection authorization separately determines what the querying observer receives.
+- Neighbor context may span multiple simultaneous, host-defined relation dimensions rather than only physical adjacency. SSR prescribes no universal relation taxonomy, edge schema, distance function, or traversal and propagation policy; the directional examples in `README.md` are only one spatial view.
 
 ## 6) Backend API Requirements
 
