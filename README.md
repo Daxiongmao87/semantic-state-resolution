@@ -11,14 +11,15 @@
 
 - This repository/component documents Semantic State Resolution (SSR), an architectural component used by the main RPG project.
 - SSR is not the whole project and does not own the main project's definition of done.
-- The main project is a fully fledged role-playing application built for 2014 D&D 5e SRD / SRD 5.1 compatibility.
+- SSR is the concept described here. The RPG engine, 2014 D&D 5e SRD / SRD 5.1 ruleset, LAN validation UI, HTTP API, and TypeScript implementation are one planned demonstrator, not requirements of SSR itself.
+- `SPEC.md` and `IMPLEMENTATION.md` describe that demonstrator. They are supporting, non-normative documents and do not redefine the concept in this README.
 - When checked out inside the main project, root-level acceptance criteria live at `../DEFINITION_OF_DONE.md`.
-- SSR supports canonical state, event-sourced persistence, latent entity collapse, constraint/provenance tracking, and no-retcon behavior.
+- SSR supports canonical state, event-sourced persistence, progressive facet resolution, constraint/provenance tracking, and no-retcon behavior.
 - Symbolic game logic remains the final authority for hard mechanics; the LLM proposes and interprets but does not directly mutate canonical state.
 
 ## 1. Executive Summary
 
-This component documents Semantic State Resolution (SSR) for a backend-first, 2014 D&D 5e SRD-compatible role-playing engine. The main project goal is a complete RPG adjudication backend with no-retcon state and deterministic replay.
+This component documents Semantic State Resolution (SSR), an architecture for progressively resolving latent world state without allowing generated content to silently contradict prior commitments. The planned reference demonstrator is a backend-first, 2014 D&D 5e SRD-compatible role-playing engine with no-retcon state and deterministic replay.
 
 Traditional game engines treat Narrative (Flavor Text, Visuals) and Systems (Stats, Mechanics) as separate domains. This separation leads to Ludonarrative Dissonance, where a sword described as "cursed" behaves identically to a standard iron blade.
 
@@ -27,9 +28,9 @@ Semantic State Resolution (SSR) is a unified architecture that resolves this iss
 Unlike pure generative AI, SSR does not grant the Large Language Model (LLM) authority over the game state. The LLM is a DM-like proposer/interpreter that generates prose mechanics, NPC responses, and candidate entities/content under schema constraints.
 The symbolic engine performs authoritative validation and commits hard mechanics in alignment with SRD constraints.
 
-This architecture is no-retcon: every adjudicated turn, observation, time advance, or system action commits to event log and canonical projection before response.
+This architecture is no-retcon: every state-bearing adjudication, observation result, time advance, or system action commits to the event log and canonical projection before the corresponding player-facing assertion is returned.
 
-A LAN-reachable validation UI is required to exercise the engine and inspect projections; it must remain a non-authoritative client.
+The reference demonstrator includes a LAN-reachable validation UI for exercising the engine and inspecting projections; that UI remains a non-authoritative client.
 
 ## 2. Problem Statement: The Three Traps
 
@@ -64,10 +65,18 @@ To ensure coherence, traditional games must pre-simulate the entire world (e.g.,
 ### 3.1 Core Terms
 
 **Latent Entity (Superposition):**  
-An entity that exists only as an opaque handle (ID) and a set of Constraints. It has no fully realized components (e.g., no stats, no mesh), only potential.
+An entity whose modeled resolution facets are all unresolved. It exists only as an opaque handle (ID), constraints, and provenance; it has no committed components yet.
 
 **Observation:**  
-The event where a Player or System queries a property of a Latent Entity, triggering the resolution loop.
+The event where a Player or System queries an unresolved property or component of an entity, triggering the resolution loop for only the information required by that query.
+
+**Resolution Facet:** A property, component, or deliberately grouped set of properties that can be resolved and committed independently. Resolution is facet-scoped: an entity may contain both committed and unresolved facets at the same time. Resolving an item's appearance, for example, does not automatically resolve its statistics.
+
+**Ontic Fact:** A committed fact about the world itself. Ontic facts participate in canonical consistency checks and may change only through later recorded events that represent an allowed cause.
+
+**Epistemic Claim:** A committed record of what an observer said, perceived, inferred, or believes. Recording an epistemic claim makes the claim's existence canonical; it does not automatically make its subject an ontic fact.
+
+**State-Bearing Narration:** Player-facing prose whose later contradiction would constitute a retcon. Such prose must be derived from already committed state or validated and committed before delivery. Purely stylistic wording may remain noncanonical only when it introduces no persistent fact, affordance, or mechanical implication.
 
 **Observation Scope:**
 
@@ -77,18 +86,31 @@ Defined strictly by the Interaction Horizon:
 - **Visual Horizon:** Camera Frustum + Buffer
 - **Logical Horizon:** Graph Distance (e.g., Depth 2 neighbors)
 
+The Interaction Horizon determines what may trigger resolution. It does not override disclosure rules: a player-facing projection may reveal only the committed information that the querying observer is authorized and positioned to receive.
+
 **Canonical State:**  
-A Materialized View (Projection) derived from the Event Log. It serves as the fast runtime database but is not the ultimate source of truth.
+A Materialized View (Projection) derived from the Event Log. It is the authoritative current-state view used for queries and adjudication; the Event Log remains the authoritative historical record from which that view is rebuilt.
 
 ### 3.2 Entity State Machine
 
-The following diagram illustrates the immutable lifecycle of an SSR entity.
+The following diagram illustrates the lifecycle applied independently to a resolution facet. An entity is **latent** when all relevant facets are unresolved, **partially resolved** when it contains both committed and unresolved facets, and **resolved for a given scope** when every facet required by that scope is committed. The diagram's canonical state is therefore facet-level, not a claim that the entire entity must collapse at once.
 
 ![Entity State Machine](assets/ssr_entity_state_machine.png)
 
 ### 3.3 The "No-Retcon" Invariant
 
-**Invariant:** Once an entity resolves, its realized components become canonical and may only change through recorded Deltas caused by simulation or player action. The semantic model may propose, but the engine validates and commits. Unobserved entities remain latent, defined by constraints and provenance.
+**Invariant:** Once a facet resolves, its realized value becomes canonical and may only change through a recorded Delta caused by an authorized simulation, rules, or player action. A Delta records a new state transition; it does not erase or rewrite the earlier commitment. The semantic model may propose, but the engine validates and commits. Unresolved facets remain latent, defined by constraints and provenance.
+
+### 3.4 Explicit Semantic Commitments
+
+The following rules are part of SSR itself rather than implementation details:
+
+1. **Least commitment:** Resolve only the facets required by an observation or adjudication. Unresolved facets remain constrained possibilities.
+2. **Progressive consistency:** Every newly resolved facet must be compatible with prior committed facets, active hard constraints, and the authoritative rules of the host system.
+3. **Typed claims:** World facts, observations, beliefs, utterances, rumors, and narration are not interchangeable. Promotion from an epistemic claim to an ontic constraint must be an explicit, validated, recorded operation.
+4. **Grounded output:** A proposer may suggest facts and wording, but it cannot make a state-bearing assertion canonical merely by saying it. Validation and commit precede authoritative player-facing output.
+5. **Recorded change:** No-retcon does not mean that the world is frozen. A committed fact may be superseded by a later committed state transition with an allowed in-world or mechanical cause; the earlier event remains part of history.
+6. **Replay boundary:** Authoritative replay folds committed events into projections. It does not ask the LLM to regenerate accepted proposals or prose and then treat a potentially different answer as history.
 
 ## 4. Architecture & Data Contracts
 
@@ -114,6 +136,12 @@ Each constraint is stored as a record:
 - **Soft constraints** are dropped when strength < Strength_Threshold (default 0.15) or when ttl expires.
 - **Hard constraints** persist unless explicitly terminated by ConstraintObsoleted or ConstraintContradicted.
 
+**Constraint Semantics:**
+- Active hard constraints are obligations: a candidate cannot commit unless it satisfies them and all higher-priority canonical facts.
+- Soft constraints guide selection among otherwise valid candidates and may be weakened, expired, or discarded. Their strength never permits a hard-constraint or canonical-state violation.
+- Propagation constrains only unresolved facets. It cannot silently alter a facet that has already been committed.
+- A constraint always retains its source and status so the engine can distinguish a valid obligation, an obsolete assumption, and a known false claim.
+
 ### 4.3 The Solver Interface (The Contract)
 
 The boundary between the Game Engine and the LLM is strict.
@@ -122,6 +150,8 @@ The boundary between the Game Engine and the LLM is strict.
 2. **LLM Proposal:** Returns structured JSON (Proposals).
 3. **Engine Validation:** Checks schema, ranges, and game rules.
 4. **Commit:** Validated data is written to the Event Log.
+
+The proposer generates candidates; it does not decide that its own candidate is satisfiable. The authoritative engine makes that decision using the host rules and active constraints. SSR requires this authority boundary but does not prescribe a particular constraint-solving algorithm.
 
 #### 4.3.1 Deterministic Fallback Protocol
 
@@ -137,8 +167,8 @@ SSR relies on Event Sourcing for replayability and consistency. The Event Log is
 
 #### 4.4.1 Event Schema
 
-**ResolutionCommitted:** Writes the full component set.
-- Payload: `{ components: { ... }, frozen_stats: { ... }, tags: [ ... ] }`
+**ResolutionCommitted:** Writes one or more newly resolved facets without replacing previously committed facets.
+- Payload: `{ resolved_facets: [ ... ], components: { ... }, frozen_stats: { ... }, tags: [ ... ] }`
 
 **DeltaApplied:** Writes patch operations (add/remove/set).
 - Payload: `{ op: "set", path: "/components/Inventory/slots/main/durability", value: 12 }`
@@ -146,6 +176,14 @@ SSR relies on Event Sourcing for replayability and consistency. The Event Log is
 ### 4.5 Architectural Pattern Mapping
 
 SSR is a composite architecture built on standard software engineering patterns. This mapping ensures the system is maintainable and testable.
+
+- **Least commitment / progressive resolution:** Defers unspecified facets until an observation or adjudication requires them.
+- **Proposal-validation boundary:** Separates creative candidate generation from authoritative acceptance.
+- **Constraint propagation:** Carries earlier commitments forward as obligations on unresolved state.
+- **Event sourcing:** Preserves the sequence of accepted commitments and causal changes.
+- **Materialized projection:** Provides the authoritative current-state view derived from those events.
+
+Event sourcing supplies traceability and replay, but does not create no-retcon behavior by itself. No-retcon follows from the additional rule that previously committed facts cannot be replaced except through an authorized, recorded state transition.
 
 ## 5. The SSR Lifecycle (The Loop)
 
@@ -167,8 +205,8 @@ The following sequence details the flow of data from Observation to Propagation,
 
 **Phase 4: Validation & Resolution**
 - Engine validates output against ruleset + whitelists.
-- Commit: ResolutionCommitted event written to log
-- Materialize: Entity_ID_104 projected as Chemical Runoff Plant
+- Commit: ResolutionCommitted event written for the requested facets
+- Materialize: Entity_ID_104 projected as a Chemical Runoff Plant for those facets; unrelated facets may remain unresolved
 
 **Phase 5: Propagation (Constraint Injection)**
 - Engine injects constraints into neighbors via events.
@@ -177,7 +215,7 @@ The following sequence details the flow of data from Observation to Propagation,
 
 **Note on Latency & Future Proofing**
 
-The SSR architecture is Latency Agnostic. It utilizes Lookahead Buffers (resolving Depth+1 while the player is at Depth 0) to mask current LLM inference times. However, the architecture is designed to scale directly with model advances. As inference costs approach zero, the buffer size decreases, but the architectural invariants (Validation, Event Sourcing) remain identical.
+The SSR invariants do not depend on a particular inference speed. A host may use Lookahead Buffers (resolving Depth+1 while the player is at Depth 0) to mask some LLM inference time. This does not make an implementation latency-free: observed responsiveness still depends on model, validation, persistence, workload, and buffer behavior. As inference costs decrease, the buffer size may decrease while the architectural invariants remain identical.
 
 ## 6. Conflict Resolution & Precedence
 
@@ -200,35 +238,40 @@ When generating new content, constraints may conflict. The Solver follows this p
 2. **Inspect:** Resolve Visuals. Result: "Slime-coated Blade." (Tags: Toxic, Crude).
 3. **Equip:** Resolve Stats.
 
+After inspection and before equipment, the item is partially resolved: its committed visual facet constrains its still-latent mechanical facet. The later statistics must be compatible with the already committed description and tags.
+
 #### 7.1.1 The Translation Layer (Tag-to-Math)
 
 The LLM is a Selector, not a Calculator. It generates Semantic Tags which map to Game Math via a Translation Table.
 
 - **Tag Canonicalization:** The LLM may only output tags from a provided whitelist.
-- **No-Retcon Fix (Balance Patches):** Numeric baseline stats are Frozen at the moment of Resolution.
+- **No-Retcon Fix (Balance Patches):** Numeric baseline stats are frozen when the mechanical facet resolves. Resolving a visual facet alone does not freeze statistics that remain latent.
 
-**The Maintenance Trade-off:** This approach deliberately trades Runtime Chaos for Design-Time Structure. Maintaining the Translation Table requires defining valid mappings for all tags. This front-loaded effort is the cost of ensuring that high-variance AI outputs result in balanced, bug-free gameplay.
+**The Maintenance Trade-off:** This approach deliberately trades Runtime Chaos for Design-Time Structure. Maintaining the Translation Table requires defining valid mappings for all tags. This front-loaded effort bounds high-variance AI outputs to mechanics explicitly represented by the table and validators; it does not by itself prove global balance or the absence of implementation bugs.
 
 ### 7.2 Reverse Propagation (Cognition)
 
-1. **Dialogue:** NPC generates a rumor: "The sewers are flooded."
-2. **Propagation:** The Engine injects `State: Flooded` as a Hard Constraint into the unvisited Sewer Sector.
-3. **Result:** When the player eventually reaches the sewers, the map generator must generate water obstacles to satisfy the constraint.
+1. **Dialogue:** NPC generates the utterance: "The sewers are flooded."
+2. **Claim Commit:** The Engine records that the NPC made this claim. At this point, the speech act is canonical; the sewer's flooded state is not automatically canonical.
+3. **Validated Promotion:** Because the sewer's relevant facets are unresolved and the host's propagation policy accepts the claim, the Engine explicitly promotes its content into the hard constraint `State: Flooded`, retaining the utterance as provenance.
+4. **Result:** When the player eventually reaches the sewers, the map generator must generate water obstacles to satisfy the promoted constraint.
+
+If the sewers had already been canonically established as dry, the utterance could remain a lie, mistake, outdated belief, or false rumor. It could not overwrite the committed sewer state merely because an NPC said it.
 
 ## 8. Conclusion
 
 SSR is not merely "LLMs writing text." It is a rigorous system architecture where:
 
-- **Latent Entities** minimize resource usage.
+- **Latent Facets** defer work and storage for details that have not yet been required.
 - **Event Sourcing** ensures deterministic replay and traceability.
 - **Canonical Projections** prevent "dream logic."
-- **Validation Layers** guarantee engine stability.
+- **Validation Layers** enforce the schemas, constraints, and invariants that the host has actually encoded.
 
-This standard provides the blueprint for infinite, coherent worlds that respect player agency and logical cause-and-effect.
+This standard provides a blueprint for open-ended worlds that preserve coherence within their encoded rules, constraints, and committed facts while respecting player agency and logical cause-and-effect.
 
 ## 9. Appendix: Reference Data Contracts
 
-To facilitate implementation, the following JSON schemas define the core communication protocol between the Engine and the Semantic Solver.
+To illustrate implementation, the following JSON message shapes show one possible communication protocol between the Engine and the Semantic Solver. They are examples, not normative JSON Schema definitions. Implementations may use different fields or formats while preserving SSR's authority, validation, commitment, provenance, and replay invariants.
 
 ### 9.1 Solver Request (Engine -> LLM)
 
