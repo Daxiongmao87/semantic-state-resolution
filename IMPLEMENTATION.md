@@ -90,7 +90,7 @@ Resolve latent content through constrained proposal + validation loops.
 ### Key work
 
 1. Implement an SSR orchestrator:
-   - build constraints from neighboring state and campaign context
+   - build constraints from contextually related state across the relation dimensions relevant to the host and current request
    - identify the unresolved facets required by the current observation or adjudication
    - request a proposal for only those facets from the LLM adapter
    - validate against schema, whitelists, SRD constraints, and canonical consistency
