@@ -1,10 +1,18 @@
-# SSR RPG Engine Specification
+# SSR RPG Demonstrator Specification
+
+## 0) Document Status and Boundary
+
+This is a non-normative specification for one RPG demonstrator of SSR. The SSR concept and its invariants are defined by `README.md`.
+
+- The D&D ruleset, complete-RPG scope, LAN validation UI, HTTP endpoints, and example TypeScript whitelists are demonstrator requirements, not requirements for every SSR implementation.
+- This document may specialize the concept for the demonstrator but may not weaken or redefine SSR's authority, progressive-resolution, typed-claim, validation, commitment, provenance, no-retcon, or replay invariants.
+- If this document conflicts with the conceptual declarations in `README.md`, the README controls the meaning of SSR.
 
 ## 1) Scope and Engine Goal
 
-This is a specification for a backend-first RPG engine that is compatible with the 2014 D&D 5e SRD and SRD 5.1.
-A full role-playing system is required, with full rules coverage and deterministic state persistence.
-A LAN-accessible validation UI is required for gameplay simulation, projection inspection, and replay.
+The reference demonstrator is a backend-first RPG engine that is compatible with the 2014 D&D 5e SRD and SRD 5.1.
+For this demonstrator, a full role-playing system is required, with full rules coverage and deterministic state persistence.
+For this demonstrator, a LAN-accessible validation UI is required for gameplay simulation, projection inspection, and replay.
 
 ## 2) Roles and Authority Boundaries
 
@@ -38,14 +46,16 @@ A LAN-accessible validation UI is required for gameplay simulation, projection i
 - **Hard mechanics (binding):** All above rules are authoritative SRD behavior and cannot be overridden by prose output.
 - **Content (collapsible):** Monsters, NPC facts, locations, rumors, items, treasure, causes, and similar world content may begin latent and resolve through SSR proposals.
 - **Constraint coupling:** Content proposals are valid only after symbolic validation against constraints and SRD mechanics compatibility.
+- **Typed claims:** A committed world fact is distinct from a committed record of what a character perceived, said, inferred, or believes. Dialogue and rumors do not become world truth unless the engine explicitly validates and records that promotion as a constraint or resolved fact.
+- **Grounded narration:** Any player-facing prose that asserts a persistent fact, affordance, or mechanical result must agree with committed state or be validated and committed before delivery. Stylistic prose that adds no persistent assertion may remain noncanonical.
 
 ## 4) Canonical State and Persistence
 
-- Canonical state is the game truth source.
-- Every accepted action must append to the event log and update canonical projections before returning player-facing output.
+- The event log is the authoritative historical record. Canonical state is the authoritative current-state projection derived from that log and used by game queries and adjudication.
+- Every accepted state-bearing action or observation must append its resulting events and update canonical projections before returning the corresponding player-facing output.
 - The event log is replayable.
-- Replay/load must reproduce the same canonical projection and derived state.
-- No-retcon is mandatory: resolved facts cannot be silently invalidated by later LLM output.
+- Replay/load must reproduce the same canonical projection and derived state by folding the recorded events; authoritative replay must not depend on asking the LLM to regenerate an accepted answer.
+- No-retcon is mandatory: resolved facts cannot be silently invalidated by later LLM output. They may change through a later authorized and recorded causal transition, which preserves the earlier commitment in the event history.
 
 ## 5) Gameplay Contracts
 
@@ -62,16 +72,19 @@ A LAN-accessible validation UI is required for gameplay simulation, projection i
 
 ### 5.2 SSR Collapse and Proposal Contracts
 
-- Latent entities resolve only through proposal + validation flow:
+- Resolution operates on requested facets: independently committable properties, components, or deliberate groups of properties. An entity may therefore be partially resolved.
+- Latent facets resolve only through proposal + validation flow:
   1. engine builds constrained proposal request
   2. LLM proposes candidate content under allow-lists
   3. engine validates constraints, ranges, and canonical consistency
-  4. engine commits resolved entity state or rejects with corrective event
+  4. engine commits only the validated facets or rejects with a recorded reason
+- Previously committed facets constrain later proposals and cannot be replaced by resolving another facet.
 
 ### 5.3 Observation and Projection
 
-- Observation requests query current visible or derivable state.
+- Observation requests query current visible or derivable state and identify the facets needed by the query.
 - Projections can omit hidden latent details and expose only what the UI/player is authorized or positioned to see.
+- Interaction range determines what may trigger resolution; projection authorization separately determines what the querying observer receives.
 
 ## 6) Backend API Requirements
 
@@ -131,11 +144,15 @@ Any whitelist miss is a validation error that prevents commit.
 
 - All random outcomes and tie-breaks must use deterministic seeds for deterministic replay per session seed.
 - All generated numbers and timings used for mechanics must be recorded in the event stream.
+- Accepted LLM results needed for state or replay must be recorded as committed events or event-linked payloads. Replay consumes those records rather than re-running inference.
 - Tests and verification must validate:
   - hard mechanics parity with SRD assumptions,
   - persistence and replay invariance,
   - LLM proposal schema/whitelist conformance,
-  - separation of prose generation from mechanic authority.
+  - separation of prose generation from mechanic authority,
+  - component-level progressive resolution,
+  - separation of ontic facts from speech, belief, rumor, and observation claims,
+  - agreement between state-bearing narration and prior commits.
 
 ## 9) Rejected Architecture Patterns
 
