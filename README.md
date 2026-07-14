@@ -72,6 +72,8 @@ The event where a Player or System queries an unresolved property or component o
 
 **Resolution Facet:** A property, component, or deliberately grouped set of properties that can be resolved and committed independently. Resolution is facet-scoped: an entity may contain both committed and unresolved facets at the same time. Resolving an item's appearance, for example, does not automatically resolve its statistics.
 
+**Relational Neighbor:** An entity related to another entity along one or more context-relevant dimensions. Neighboring is not limited to physical adjacency, and the same entities may be neighbors in several dimensions at once. Dimensions may be spatial, temporal, causal, social, semantic, mechanical, or anything else meaningful to the host domain; this list is illustrative, not a required taxonomy. SSR defines the multidimensional relationship concept but does not prescribe relation names, edge formats, storage models, distance functions, traversal algorithms, weights, or propagation policies.
+
 **Ontic Fact:** A committed fact about the world itself. Ontic facts participate in canonical consistency checks and may change only through later recorded events that represent an allowed cause.
 
 **Epistemic Claim:** A committed record of what an observer said, perceived, inferred, or believes. Recording an epistemic claim makes the claim's existence canonical; it does not automatically make its subject an ontic fact.
@@ -86,7 +88,7 @@ Defined strictly by the Interaction Horizon:
 - **Visual Horizon:** Camera Frustum + Buffer
 - **Logical Horizon:** Graph Distance (e.g., Depth 2 neighbors)
 
-The Interaction Horizon determines what may trigger resolution. It does not override disclosure rules: a player-facing projection may reveal only the committed information that the querying observer is authorized and positioned to receive.
+The Interaction Horizon determines what may trigger resolution. A logical horizon may follow whichever relation dimension or combination of dimensions is relevant to the observation; SSR does not define one universal notion of graph distance. The horizon does not override disclosure rules: a player-facing projection may reveal only the committed information that the querying observer is authorized and positioned to receive.
 
 **Canonical State:**  
 A Materialized View (Projection) derived from the Event Log. It is the authoritative current-state view used for queries and adjudication; the Event Log remains the authoritative historical record from which that view is rebuilt.
@@ -111,6 +113,7 @@ The following rules are part of SSR itself rather than implementation details:
 4. **Grounded output:** A proposer may suggest facts and wording, but it cannot make a state-bearing assertion canonical merely by saying it. Validation and commit precede authoritative player-facing output.
 5. **Recorded change:** No-retcon does not mean that the world is frozen. A committed fact may be superseded by a later committed state transition with an allowed in-world or mechanical cause; the earlier event remains part of history.
 6. **Replay boundary:** Authoritative replay folds committed events into projections. It does not ask the LLM to regenerate accepted proposals or prose and then treat a potentially different answer as history.
+7. **Multidimensional neighborhood:** Context, observation, and propagation may use multiple simultaneous relation dimensions. SSR preserves that plurality as part of the concept while leaving the choice and treatment of dimensions to the host.
 
 ## 4. Architecture & Data Contracts
 
@@ -122,7 +125,7 @@ The Engine acts as a Mediator to enforce the Strategy and Event Sourcing pattern
 
 ### 4.2 The Constraint Store (The Constraint Graph)
 
-Instead of a "random seed," unvisited worlds are defined by a Constraint Graph.
+Instead of a "random seed," unvisited worlds are defined by a Constraint Graph. The graph is relational rather than inherently spatial: a pair of entities may be connected through multiple distinct dimensions, and different contexts may consider different relations. SSR does not require those relations to be represented or propagated uniformly.
 
 #### 4.2.1 Constraint Record
 
@@ -194,7 +197,9 @@ The following sequence details the flow of data from Observation to Propagation,
 **Phase 1: Superposition (Latent State)**
 - The world contains Entity_ID_104.
 - State: Latent
-- Constraints: `{ Neighbor: "Industrial_Zone", Global_Event: "Acid_Rain" }`
+- Constraints: `{ Spatial_Neighbor: "Industrial_Zone", Global_Event: "Acid_Rain" }`
+
+This lifecycle uses spatial adjacency as one example relation. It does not reduce SSR neighbors to map adjacency or prevent other relation dimensions from contributing context simultaneously.
 
 **Phase 2: Observation (Trigger)**
 - The player enters the sector containing Entity_ID_104.
@@ -209,7 +214,7 @@ The following sequence details the flow of data from Observation to Propagation,
 - Materialize: Entity_ID_104 projected as a Chemical Runoff Plant for those facets; unrelated facets may remain unresolved
 
 **Phase 5: Propagation (Constraint Injection)**
-- Engine injects constraints into neighbors via events.
+- Engine injects constraints into spatial neighbors via events in this example.
 - Action: Injects ConstraintInjected event for Entity_ID_105.
 - Constraint: `Ground_Water: Contaminated`
 
@@ -223,7 +228,7 @@ The SSR invariants do not depend on a particular inference speed. A host may use
 
 When generating new content, constraints may conflict. The Solver follows this precedence hierarchy:
 
-1. **Canonical State (Highest):** If a neighbor is already resolved, its reality is absolute.
+1. **Canonical State (Highest):** If a contextually related entity or facet is already resolved, its committed reality is absolute.
 2. **Hard Constraints:** Quest requirements or previous Propagation tags.
 3. **Soft Constraints:** General themes.
 4. **LLM Generation (Lowest):** The model's "creative filler."
@@ -272,6 +277,8 @@ This standard provides a blueprint for open-ended worlds that preserve coherence
 ## 9. Appendix: Reference Data Contracts
 
 To illustrate implementation, the following JSON message shapes show one possible communication protocol between the Engine and the Semantic Solver. They are examples, not normative JSON Schema definitions. Implementations may use different fields or formats while preserving SSR's authority, validation, commitment, provenance, and replay invariants.
+
+The `north` and `west` keys below show one spatial view of neighboring entities. They do not define a required neighbor schema and do not exclude simultaneous non-spatial relation dimensions.
 
 ### 9.1 Solver Request (Engine -> LLM)
 
