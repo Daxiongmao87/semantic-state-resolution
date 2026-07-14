@@ -1,4 +1,8 @@
-# SSR RPG Engine Implementation Plan
+# SSR RPG Demonstrator Implementation Plan
+
+## Document Status
+
+This is a non-normative implementation plan for the RPG demonstrator described in `SPEC.md`. It is not the definition of SSR. `README.md` defines the concept and its invariants; the technology, ruleset, API, UI, and phase ordering below are choices for validating that concept in one host application.
 
 ## Objective
 
@@ -15,7 +19,8 @@ Establish a strict TypeScript backend scaffold with API, module boundaries, and 
 1. Create canonical engine modules for state, constraints, events, and solver contracts.
 2. Define strict TypeScript types for:
    - canonical entities
-   - latent/collapsed lifecycle
+   - per-facet latent/proposing/committed lifecycle and aggregate partial-resolution state
+   - ontic facts and epistemic claims such as observations, beliefs, utterances, and rumors
    - event envelopes
    - intent and proposal schemas
 3. Add deterministic seeded utilities for dice, random selection, and timestamps for testability.
@@ -66,14 +71,15 @@ Guarantee replayability and no-retcon continuity.
 1. Implement append-only event log schema and writer.
 2. Implement projection builder that folds events into canonical session state.
 3. Implement snapshot + replay CLI/API for load and verification.
-4. Ensure every accepted intent, observation, time advance, and system action writes at least one event before response.
+4. Ensure every accepted state-bearing intent, observation, time advance, and system action writes its resulting events before the corresponding response.
 5. Add audit tables/markers for collapse provenance and rejection reasons.
 
 ### Exit criteria
 
 - A replay from event log recreates equivalent canonical state.
-- No accepted user-facing response without prior event commit.
+- No state-bearing user-facing assertion without prior event commit.
 - Event stream supports deterministic rehydration in tests and UI inspection tools.
+- Replay uses recorded accepted results and does not re-run LLM inference as a source of historical truth.
 
 ## Phase 3: SSR Resolution Engine
 
@@ -85,19 +91,23 @@ Resolve latent content through constrained proposal + validation loops.
 
 1. Implement an SSR orchestrator:
    - build constraints from neighboring state and campaign context
-   - request proposal from LLM adapter
+   - identify the unresolved facets required by the current observation or adjudication
+   - request a proposal for only those facets from the LLM adapter
    - validate against schema, whitelists, SRD constraints, and canonical consistency
-   - commit resolution event on success
-2. Implement entity lifecycle states and transitions:
+   - commit the validated facets and their provenance on success
+2. Implement facet lifecycle states and aggregate entity state:
    - latent
    - proposing
-   - collapsed
+   - committed
+   - partially resolved (entity aggregate)
 3. Add deterministic fallback behavior for proposal failures (schema-safe local defaults, not front-end heuristics).
 
 ### Exit criteria
 
-- Latent entities can only enter collapsed state through validated proposal events.
+- Latent facets can only enter committed state through validated resolution events.
+- Resolving one facet preserves every prior commitment and leaves unrelated facets unresolved.
 - Constraint propagation records sources and confidence for downstream resolution.
+- Propagated constraints can restrict unresolved facets but cannot overwrite committed ones.
 - Fallback does not consume hidden state authority from the UI.
 
 ## Phase 4: LLM DM Adapter (Proposer / Interpreter)
@@ -116,12 +126,14 @@ Provide provider-neutral, configurable LLM entry points for:
 2. Add schema-constrained prompting and strict JSON extraction.
 3. Add retry/failure paths and telemetry fields on proposal attempts.
 4. Add adapter isolation so no game-rule logic exists in prompt handlers.
+5. Classify generated claims so that state-bearing narration is checked against committed state and epistemic statements are not silently promoted to ontic facts.
 
 ### Exit criteria
 
 - Provider adapter can be swapped without changing rule adjudication modules.
 - All LLM outputs are machine-validated before any state transition.
 - No adapter directly writes canonical state.
+- Purely stylistic prose may remain uncommitted only when it introduces no persistent fact, affordance, or mechanical implication.
 
 ## Phase 5: Prose Intent Parsing and Mechanical Interpretation
 
@@ -155,7 +167,7 @@ Wire one loop that accepts intent, resolves mechanics/content, advances time, an
    - interpret / parse
    - resolve mechanical and SSR needs
    - persist events
-   - emit player-facing projection and narration
+   - emit player-facing projection and narration grounded in the resulting committed state
 2. Add deterministic turn boundaries and initiative/action budgeting.
 3. Track encounter state, turn sequencing, and time passage as event updates.
 
@@ -163,7 +175,7 @@ Wire one loop that accepts intent, resolves mechanics/content, advances time, an
 
 - Every turn in a session has explicit start/end event markers.
 - Engine enforces action economy and encounter constraints.
-- Prose responses always correspond to committed symbolic outcomes.
+- State-bearing prose responses always correspond to committed symbolic outcomes and resolved world facts.
 
 ## Phase 7: Content Collapse Systems
 
@@ -174,14 +186,17 @@ Collapse story-facing content while preserving hard mechanics binding.
 ### Key work
 
 1. Add content domains: monster/NPC/location/treasure/rumor/equipment proposal schemas.
-2. Build per-domain whitelists and provenance tracking.
-3. Validate every proposed content proposal before commit (no direct injection).
-4. Keep content changes reversible only through new events, not silent mutation.
+2. Represent ontic world facts separately from observations, beliefs, utterances, and rumors.
+3. Build per-domain whitelists and provenance tracking.
+4. Make any promotion from an epistemic claim to an ontic constraint an explicit, validated event.
+5. Validate every proposed content proposal before commit (no direct injection).
+6. Keep content changes reversible only through new causal events, not silent mutation or history replacement.
 
 ### Exit criteria
 
 - Content domains resolve through SSR contracts and are reflected in projections.
 - Mechanical representation of content (if any) is linked to canonical components and SRD rules.
+- A character can be canonically wrong: recording a statement or belief does not make its subject true unless an explicit propagation policy promotes it.
 
 ## Phase 8: LAN Validation UI (Client)
 
@@ -216,6 +231,9 @@ Prove conformance to the SRD-backed, no-retcon engine contract.
 - Canonical mechanics validation (checks, saves, combat flow, movement, rests, conditions)
 - Deterministic intent parsing and proposal validation tests
 - Hidden-state collapse invariants and no-retcon audits
+- Progressive facet-resolution tests that preserve committed facets while leaving unrelated facets latent
+- Claim-layer tests for world facts, observations, beliefs, utterances, rumors, and promoted constraints
+- Narration-grounding tests for persistent player-facing assertions
 - Multi-run uniqueness checks for high-level generated sessions
 - LAN validation UI scenario tests (scenario submit/observe/replay)
 
