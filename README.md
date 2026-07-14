@@ -14,12 +14,12 @@
 - SSR is the concept described here. The RPG engine, 2014 D&D 5e SRD / SRD 5.1 ruleset, LAN validation UI, HTTP API, and TypeScript implementation are one planned demonstrator, not requirements of SSR itself.
 - `SPEC.md` and `IMPLEMENTATION.md` describe that demonstrator. They are supporting, non-normative documents and do not redefine the concept in this README.
 - When checked out inside the main project, root-level acceptance criteria live at `../DEFINITION_OF_DONE.md`.
-- SSR supports canonical state, event-sourced persistence, progressive facet resolution, constraint/provenance tracking, and no-retcon behavior.
+- SSR supports canonical state, event-sourced persistence, progressive facet resolution, noncanonical reconciliation, constraint/provenance tracking, and no-retcon behavior within a canonical scope.
 - Symbolic game logic remains the final authority for hard mechanics; the LLM proposes and interprets but does not directly mutate canonical state.
 
 ## 1. Executive Summary
 
-This component documents Semantic State Resolution (SSR), an architecture for progressively resolving latent world state without allowing generated content to silently contradict prior commitments. The planned reference demonstrator is a backend-first, 2014 D&D 5e SRD-compatible role-playing engine with no-retcon state and deterministic replay.
+This component documents Semantic State Resolution (SSR), an architecture for progressively resolving latent knowledge into canonical state without allowing generated or ingested content to silently contradict prior commitments. The planned reference demonstrator is a backend-first, 2014 D&D 5e SRD-compatible role-playing engine with no-retcon state and deterministic replay.
 
 Traditional game engines treat Narrative (Flavor Text, Visuals) and Systems (Stats, Mechanics) as separate domains. This separation leads to Ludonarrative Dissonance, where a sword described as "cursed" behaves identically to a standard iron blade.
 
@@ -68,17 +68,25 @@ To ensure coherence, traditional games must pre-simulate the entire world (e.g.,
 An entity whose modeled resolution facets are all unresolved. It exists only as an opaque handle (ID), constraints, and provenance; it has no committed components yet.
 
 **Observation:**  
-The event where a Player or System queries an unresolved property or component of an entity, triggering the resolution loop for only the information required by that query.
+An event where an observer or host system queries an unresolved property or component of an entity, triggering the resolution loop for only the information required by that query. Observation is one possible commitment trigger, not the only one.
 
 **Resolution Facet:** A property, component, or deliberately grouped set of properties that can be resolved and committed independently. Resolution is facet-scoped: an entity may contain both committed and unresolved facets at the same time. Resolving an item's appearance, for example, does not automatically resolve its statistics.
 
+**Commitment Policy:** The host-defined rules that determine which validated assertions enter a canonical scope, which inputs have authority to request that commitment, and when commitment is required. Receiving or generating content does not make it true by itself. A host may treat an authorized observation, adjudication, publication, approval, presentation, or other domain event as a binding commitment trigger, but SSR records its result as canonical only through authoritative validation and commit.
+
+**Noncanonical Working Material:** Authored or generated candidates, draft prose, cached candidate resolutions, assumptions, and soft constraints that may be detailed and useful without being canonical. Working material may guide later resolution and may be revised, reconciled, or discarded. It has no ontic authority and is not a third canonical truth layer.
+
+**Canonical Scope:** A host-defined continuity, version, or comparable context with one coherent event history and canonical projection. Each scope independently obeys SSR's commitment and no-retcon invariants. Observer-specific disclosure or belief does not by itself create a different ontic truth; it remains an epistemic projection over the selected scope.
+
+**Authoring Rebaseline:** An explicit, host-authorized administrative operation that establishes a revised canonical scope when prior commitments must be editorially superseded. It is not ordinary semantic resolution, is not an in-domain causal Delta, and cannot be initiated by the proposer. The prior scope and its event history remain unmodified. SSR does not prescribe how hosts store, review, select, or publish scopes.
+
 **Relational Neighbor:** An entity related to another entity along one or more context-relevant dimensions. Neighboring is not limited to physical adjacency, and the same entities may be neighbors in several dimensions at once. Dimensions may be spatial, temporal, causal, social, semantic, mechanical, or anything else meaningful to the host domain; this list is illustrative, not a required taxonomy. SSR defines the multidimensional relationship concept but does not prescribe relation names, edge formats, storage models, distance functions, traversal algorithms, weights, or propagation policies.
 
-**Ontic Fact:** A committed fact about the world itself. Ontic facts participate in canonical consistency checks and may change only through later recorded events that represent an allowed cause.
+**Ontic Fact:** A committed fact about the domain itself within a canonical scope. Ontic facts participate in canonical consistency checks and may change inside that scope only through later recorded events that represent an allowed in-domain cause.
 
 **Epistemic Claim:** A committed record of what an observer said, perceived, inferred, or believes. Recording an epistemic claim makes the claim's existence canonical; it does not automatically make its subject an ontic fact.
 
-**State-Bearing Narration:** Player-facing prose whose later contradiction would constitute a retcon. Such prose must be derived from already committed state or validated and committed before delivery. Purely stylistic wording may remain noncanonical only when it introduces no persistent fact, affordance, or mechanical implication.
+**State-Bearing Output:** Consumer-facing prose or other output whose later contradiction would constitute a retcon within its canonical scope. Such output must be derived from already committed state or validated and committed before delivery. Purely stylistic wording may remain noncanonical only when it introduces no persistent fact, affordance, or mechanical implication.
 
 **Observation Scope:**
 
@@ -88,20 +96,24 @@ Defined strictly by the Interaction Horizon:
 - **Visual Horizon:** Camera Frustum + Buffer
 - **Logical Horizon:** Graph Distance (e.g., Depth 2 neighbors)
 
-The Interaction Horizon determines what may trigger resolution. A logical horizon may follow whichever relation dimension or combination of dimensions is relevant to the observation; SSR does not define one universal notion of graph distance. The horizon does not override disclosure rules: a player-facing projection may reveal only the committed information that the querying observer is authorized and positioned to receive.
+The Interaction Horizon determines what may trigger resolution. A logical horizon may follow whichever relation dimension or combination of dimensions is relevant to the observation; SSR does not define one universal notion of graph distance. The horizon does not override disclosure rules: an observer-facing projection may reveal only the committed information that the querying observer is authorized and positioned to receive.
 
 **Canonical State:**  
-A Materialized View (Projection) derived from the Event Log. It is the authoritative current-state view used for queries and adjudication; the Event Log remains the authoritative historical record from which that view is rebuilt.
+A Materialized View (Projection) derived from the selected canonical scope's Event Log. It is the authoritative current-state view used for queries and adjudication in that scope; the Event Log remains the authoritative historical record from which that view is rebuilt.
 
 ### 3.2 Entity State Machine
 
 The following diagram illustrates the lifecycle applied independently to a resolution facet. An entity is **latent** when all relevant facets are unresolved, **partially resolved** when it contains both committed and unresolved facets, and **resolved for a given scope** when every facet required by that scope is committed. The diagram's canonical state is therefore facet-level, not a claim that the entire entity must collapse at once.
 
+Noncanonical working material remains outside this state machine. A detailed draft or cached candidate does not enter canonical state until it passes authority classification, validation, and recorded commit.
+
 ![Entity State Machine](assets/ssr_entity_state_machine.png)
 
 ### 3.3 The "No-Retcon" Invariant
 
-**Invariant:** Once a facet resolves, its realized value becomes canonical and may only change through a recorded Delta caused by an authorized simulation, rules, or player action. A Delta records a new state transition; it does not erase or rewrite the earlier commitment. The semantic model may propose, but the engine validates and commits. Unresolved facets remain latent, defined by constraints and provenance.
+**Invariant:** Once a facet resolves within a canonical scope, its realized value becomes canonical and may change inside that scope only through a recorded Delta representing an authorized in-domain causal transition. A Delta records a new state transition; it does not erase or rewrite the earlier commitment. The semantic model may propose, but the host authority validates and commits. Unresolved facets remain latent, defined by constraints and provenance.
+
+An Authoring Rebaseline is deliberately outside this invariant: it establishes a revised canonical scope rather than rewriting the prior scope or masquerading as an in-domain event. The resolver never gains authority to retcon committed facts.
 
 ### 3.4 Explicit Semantic Commitments
 
@@ -110,10 +122,15 @@ The following rules are part of SSR itself rather than implementation details:
 1. **Least commitment:** Resolve only the facets required by an observation or adjudication. Unresolved facets remain constrained possibilities.
 2. **Progressive consistency:** Every newly resolved facet must be compatible with prior committed facets, active hard constraints, and the authoritative rules of the host system.
 3. **Typed claims:** World facts, observations, beliefs, utterances, rumors, and narration are not interchangeable. Promotion from an epistemic claim to an ontic constraint must be an explicit, validated, recorded operation.
-4. **Grounded output:** A proposer may suggest facts and wording, but it cannot make a state-bearing assertion canonical merely by saying it. Validation and commit precede authoritative player-facing output.
-5. **Recorded change:** No-retcon does not mean that the world is frozen. A committed fact may be superseded by a later committed state transition with an allowed in-world or mechanical cause; the earlier event remains part of history.
+4. **Grounded output:** A proposer may suggest facts and wording, but it cannot make a state-bearing assertion canonical merely by saying it. Validation and commit precede authoritative consumer-facing output.
+5. **Recorded change:** No-retcon does not mean that the world is frozen. A committed facet's current value may later change through a recorded, allowed in-domain causal transition; the earlier event remains part of history.
 6. **Replay boundary:** Authoritative replay folds committed events into projections. It does not ask the LLM to regenerate accepted proposals or prose and then treat a potentially different answer as history.
 7. **Multidimensional neighborhood:** Context, observation, and propagation may use multiple simultaneous relation dimensions. SSR preserves that plurality as part of the concept while leaving the choice and treatment of dimensions to the host.
+8. **Input classification:** Ingested content is not canonical merely because it was received. The host's authority model classifies it as a proposal, epistemic claim, evidence, constraint, or candidate commitment before validation.
+9. **Commitment boundary:** The host selects commitment triggers, but every canonical assertion still crosses authority classification, validation, and recorded commit before becoming authoritative. A semantic proposer participates only when candidate generation or interpretation is required.
+10. **Noncanonical reconciliation:** New commitments may cause related working material and soft constraints to be revised. Reconciliation protects all commitments in the selected scope and prefers preserving compatible working material, without requiring a particular optimization or repair algorithm.
+11. **Scoped authoring authority:** Editorial supersession occurs only through an explicit Authoring Rebaseline that establishes a revised scope. It never becomes an ordinary resolver capability or an in-place rewrite of canonical history.
+12. **Conflict boundary:** An unresolved contradiction may remain a draft conflict, rejected proposal, or set of competing epistemic claims, but it is not committed as contradictory ontic truth. Consistency is bounded by the facts, rules, and constraints the host has encoded.
 
 ## 4. Architecture & Data Contracts
 
@@ -122,6 +139,8 @@ The following rules are part of SSR itself rather than implementation details:
 ![System Architecture](assets/ssr_system_architecture.png)
 
 The Engine acts as a Mediator to enforce the Strategy and Event Sourcing patterns.
+
+This diagram shows ordinary resolution within one canonical scope. Noncanonical working material may inform proposals and soft constraints but is not another truth source. Authoring Rebaseline remains outside this runtime path and grants no additional authority to the proposer.
 
 ### 4.2 The Constraint Store (The Constraint Graph)
 
@@ -144,17 +163,18 @@ Each constraint is stored as a record:
 - Soft constraints guide selection among otherwise valid candidates and may be weakened, expired, or discarded. Their strength never permits a hard-constraint or canonical-state violation.
 - Propagation constrains only unresolved facets. It cannot silently alter a facet that has already been committed.
 - A constraint always retains its source and status so the engine can distinguish a valid obligation, an obsolete assumption, and a known false claim.
+- Reconciliation may revise noncanonical working material and soft constraints to accommodate a new commitment. It does not revise committed facets, and SSR does not prescribe how a host measures or computes the least disruptive compatible revision.
 
 ### 4.3 The Solver Interface (The Contract)
 
-The boundary between the Game Engine and the LLM is strict.
+The boundary between the host's authoritative validator and the semantic proposer is strict. An LLM is one possible proposer, not an authority merely by virtue of producing fluent output.
 
 1. **Engine Request:** Sends Context + Constraints + Schema + Allowed IDs (Whitelist).
 2. **LLM Proposal:** Returns structured JSON (Proposals).
 3. **Engine Validation:** Checks schema, ranges, and game rules.
 4. **Commit:** Validated data is written to the Event Log.
 
-The proposer generates candidates; it does not decide that its own candidate is satisfiable. The authoritative engine makes that decision using the host rules and active constraints. SSR requires this authority boundary but does not prescribe a particular constraint-solving algorithm.
+The proposer generates candidates; it does not decide that its own candidate is satisfiable. The authoritative host makes that decision using its commitment policy, rules, and active constraints. SSR requires this authority boundary but does not prescribe a particular constraint-solving algorithm.
 
 #### 4.3.1 Deterministic Fallback Protocol
 
@@ -166,7 +186,7 @@ If the LLM fails to produce a valid proposal within N retries, the system execut
 
 ### 4.4 Persistence Model (Event Sourcing)
 
-SSR relies on Event Sourcing for replayability and consistency. The Event Log is the Source of Truth; the Game World is merely its current projection.
+SSR relies on Event Sourcing for replayability and consistency. Within each canonical scope, the Event Log is the Source of Truth and the current knowledge or world state is its projection. An Authoring Rebaseline establishes another scope; it does not alter the prior scope's event history. SSR requires this semantic separation without prescribing a storage or versioning design.
 
 #### 4.4.1 Event Schema
 
@@ -183,14 +203,16 @@ SSR is a composite architecture built on standard software engineering patterns.
 - **Least commitment / progressive resolution:** Defers unspecified facets until an observation or adjudication requires them.
 - **Proposal-validation boundary:** Separates creative candidate generation from authoritative acceptance.
 - **Constraint propagation:** Carries earlier commitments forward as obligations on unresolved state.
+- **Noncanonical reconciliation:** Adapts working material and soft constraints around new commitments without granting that material canonical authority.
 - **Event sourcing:** Preserves the sequence of accepted commitments and causal changes.
 - **Materialized projection:** Provides the authoritative current-state view derived from those events.
+- **Authoring/runtime separation:** Keeps editorial rebaselining outside ordinary semantic resolution and in-domain state transitions.
 
-Event sourcing supplies traceability and replay, but does not create no-retcon behavior by itself. No-retcon follows from the additional rule that previously committed facts cannot be replaced except through an authorized, recorded state transition.
+Event sourcing supplies traceability and replay, but does not create no-retcon behavior by itself. Within a canonical scope, no-retcon follows from the additional rule that previously committed facts cannot be replaced except through an authorized, recorded in-domain state transition. An Authoring Rebaseline establishes a different scope rather than creating an exception to that rule.
 
 ## 5. The SSR Lifecycle (The Loop)
 
-The following sequence details the flow of data from Observation to Propagation, highlighting the strict separation between the Proposer (LLM) and the Truth (Event Log).
+The following sequence details ordinary resolution within one canonical scope, from Observation to Propagation, highlighting the strict separation between the Proposer (LLM) and the Truth (Event Log). It does not depict the separate Authoring Rebaseline operation.
 
 ![SSR Lifecycle](assets/ssr_lifecycle.png)
 
@@ -218,6 +240,8 @@ This lifecycle uses spatial adjacency as one example relation. It does not reduc
 - Action: Injects ConstraintInjected event for Entity_ID_105.
 - Constraint: `Ground_Water: Contaminated`
 
+If a host retains noncanonical working material, propagation may also identify related drafts, cached candidates, or soft constraints for reconciliation. Those repairs remain noncanonical until independently validated and committed, and they cannot modify already committed facets in the selected scope.
+
 **Note on Latency & Future Proofing**
 
 The SSR invariants do not depend on a particular inference speed. A host may use Lookahead Buffers (resolving Depth+1 while the player is at Depth 0) to mask some LLM inference time. This does not make an implementation latency-free: observed responsiveness still depends on model, validation, persistence, workload, and buffer behavior. As inference costs decrease, the buffer size may decrease while the architectural invariants remain identical.
@@ -233,7 +257,7 @@ When generating new content, constraints may conflict. The Solver follows this p
 3. **Soft Constraints:** General themes.
 4. **LLM Generation (Lowest):** The model's "creative filler."
 
-**Conflict Policy:** If a Hard Constraint violates Canonical State, the system marks the Constraint as "Obsolete" or "False Rumor" rather than altering the map (Retconning).
+**Conflict Policy:** If a Hard Constraint violates Canonical State, the system marks the Constraint as "Obsolete," "False Rumor," or an unresolved noncanonical conflict rather than altering committed state. Only an explicitly authorized Authoring Rebaseline may establish a revised scope, and the semantic resolver cannot invoke that operation.
 
 ## 7. Application Domains (Unified)
 
@@ -263,14 +287,29 @@ The LLM is a Selector, not a Calculator. It generates Semantic Tags which map to
 
 If the sewers had already been canonically established as dry, the utterance could remain a lie, mistake, outdated belief, or false rumor. It could not overwrite the committed sewer state merely because an NPC said it.
 
+### 7.3 Commitment-Aware Knowledge Systems
+
+A knowledge system may use SSR to assimilate new authoritative input without treating every ingested statement as truth or making its working model rigid. One possible host flow is:
+
+1. Classify incoming material under the host's authority and commitment policies.
+2. Validate and commit the assertions that have authority in the selected canonical scope.
+3. Traverse affected relationships and constraints across the relevant dimensions.
+4. Reconcile only noncanonical working material while preserving compatible content where practical.
+5. Reject or surface any repair that would require runtime mutation of a committed facet.
+6. If an authorized editor intends to revise prior canon, handle that request through an Authoring Rebaseline rather than ordinary resolution.
+
+In the RPG demonstrator, session exposure is one commitment trigger: asserted facets are committed before presentation, while unrelated, unexposed working lore remains revisable. Other domains may define different triggers and authorities without changing SSR's invariants.
+
 ## 8. Conclusion
 
 SSR is not merely "LLMs writing text." It is a rigorous system architecture where:
 
 - **Latent Facets** defer work and storage for details that have not yet been required.
+- **Noncanonical Working Material** can be reconciled without competing with canonical truth.
 - **Event Sourcing** ensures deterministic replay and traceability.
 - **Canonical Projections** prevent "dream logic."
 - **Validation Layers** enforce the schemas, constraints, and invariants that the host has actually encoded.
+- **Authoring Rebaselines** permit explicit editorial revision without weakening no-retcon behavior inside a canonical scope.
 
 This standard provides a blueprint for open-ended worlds that preserve coherence within their encoded rules, constraints, and committed facts while respecting player agency and logical cause-and-effect.
 
