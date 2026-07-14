@@ -20,9 +20,11 @@ Establish a strict TypeScript backend scaffold with API, module boundaries, and 
 2. Define strict TypeScript types for:
    - canonical entities
    - per-facet latent/proposing/committed lifecycle and aggregate partial-resolution state
+   - canonical scope identity and rebaseline provenance
+   - noncanonical working material that cannot appear in canonical projections without validation and commit
    - ontic facts and epistemic claims such as observations, beliefs, utterances, and rumors
    - event envelopes
-   - intent and proposal schemas
+   - intent, proposal, and separately authorized authoring-command schemas
 3. Add deterministic seeded utilities for dice, random selection, and timestamps for testability.
 4. Stand up a minimal HTTP API surface for:
    - session creation
@@ -69,7 +71,7 @@ Guarantee replayability and no-retcon continuity.
 ### Key work
 
 1. Implement append-only event log schema and writer.
-2. Implement projection builder that folds events into canonical session state.
+2. Implement projection builder that folds events from one selected canonical scope into canonical session state.
 3. Implement snapshot + replay CLI/API for load and verification.
 4. Ensure every accepted state-bearing intent, observation, time advance, and system action writes its resulting events before the corresponding response.
 5. Add audit tables/markers for collapse provenance and rejection reasons.
@@ -80,6 +82,7 @@ Guarantee replayability and no-retcon continuity.
 - No state-bearing user-facing assertion without prior event commit.
 - Event stream supports deterministic rehydration in tests and UI inspection tools.
 - Replay uses recorded accepted results and does not re-run LLM inference as a source of historical truth.
+- A canonical scope cannot mutate the event history or projection semantics of another scope.
 
 ## Phase 3: SSR Resolution Engine
 
@@ -92,6 +95,7 @@ Resolve latent content through constrained proposal + validation loops.
 1. Implement an SSR orchestrator:
    - build constraints from contextually related state across the relation dimensions relevant to the host and current request
    - identify the unresolved facets required by the current observation or adjudication
+   - include relevant noncanonical working material only as candidates or soft constraints
    - request a proposal for only those facets from the LLM adapter
    - validate against schema, whitelists, SRD constraints, and canonical consistency
    - commit the validated facets and their provenance on success
@@ -101,6 +105,7 @@ Resolve latent content through constrained proposal + validation loops.
    - committed
    - partially resolved (entity aggregate)
 3. Add deterministic fallback behavior for proposal failures (schema-safe local defaults, not front-end heuristics).
+4. Add noncanonical reconciliation that may revise working candidates and soft constraints around a new commitment while preferring compatible existing material.
 
 ### Exit criteria
 
@@ -108,6 +113,8 @@ Resolve latent content through constrained proposal + validation loops.
 - Resolving one facet preserves every prior commitment and leaves unrelated facets unresolved.
 - Constraint propagation records sources and confidence for downstream resolution.
 - Propagated constraints can restrict unresolved facets but cannot overwrite committed ones.
+- Reconciliation cannot modify a committed facet or publish an unresolved ontic contradiction.
+- Conflicts requiring canonical revision are returned to the authoring workflow rather than repaired by runtime resolution.
 - Fallback does not consume hidden state authority from the UI.
 
 ## Phase 4: LLM DM Adapter (Proposer / Interpreter)
@@ -133,6 +140,7 @@ Provide provider-neutral, configurable LLM entry points for:
 - Provider adapter can be swapped without changing rule adjudication modules.
 - All LLM outputs are machine-validated before any state transition.
 - No adapter directly writes canonical state.
+- No adapter can invoke, authorize, or disguise an Authoring Rebaseline.
 - Purely stylistic prose may remain uncommitted only when it introduces no persistent fact, affordance, or mechanical implication.
 
 ## Phase 5: Prose Intent Parsing and Mechanical Interpretation
@@ -145,13 +153,15 @@ Transform player prose into valid engine intents and mechanical action payloads.
 
 1. Define intent schema for movement, combat actions, social actions, object interaction, rest, and narration.
 2. Use the LLM interpreter to parse prose into this schema.
-3. Route all interpreted intents through the mechanics kernel before commit.
-4. Preserve unresolved or ambiguous interpretation as structured clarification requests, not implicit state changes.
+3. Classify attempted actions, adjudicated outcomes, character utterances, observations, and table discussion without promoting them to the same claim type.
+4. Route all interpreted intents through the mechanics kernel before commit.
+5. Preserve unresolved or ambiguous interpretation as structured clarification requests, not implicit state changes.
 
 ### Exit criteria
 
 - Free-text input is converted into canonical intent form or rejected with recovery prompt.
 - Ambiguous prose cannot trigger hard-mechanic effects.
+- Character speech and player speculation cannot become ontic truth without an explicit validated promotion.
 - Mechanically meaningful prose is replay-safe and deterministic after commit.
 
 ## Phase 6: Gameplay Loop and World Orchestration
@@ -167,6 +177,7 @@ Wire one loop that accepts intent, resolves mechanics/content, advances time, an
    - interpret / parse
    - resolve mechanical and SSR needs
    - persist events
+   - record which committed facets support each state-bearing session output
    - emit player-facing projection and narration grounded in the resulting committed state
 2. Add deterministic turn boundaries and initiative/action budgeting.
 3. Track encounter state, turn sequencing, and time passage as event updates.
@@ -175,6 +186,7 @@ Wire one loop that accepts intent, resolves mechanics/content, advances time, an
 
 - Every turn in a session has explicit start/end event markers.
 - Engine enforces action economy and encounter constraints.
+- State-bearing facets are committed before exposure, while unrelated and unexposed facets remain unresolved or noncanonical.
 - State-bearing prose responses always correspond to committed symbolic outcomes and resolved world facts.
 
 ## Phase 7: Content Collapse Systems
@@ -191,12 +203,21 @@ Collapse story-facing content while preserving hard mechanics binding.
 4. Make any promotion from an epistemic claim to an ontic constraint an explicit, validated event.
 5. Validate every proposed content proposal before commit (no direct injection).
 6. Keep content changes reversible only through new causal events, not silent mutation or history replacement.
+7. Implement a separately authorized worldbuilder workflow for Authoring Rebaseline:
+   - select an unchanged source scope
+   - express explicit editorial supersessions
+   - analyze affected relations, constraints, and working material
+   - construct and validate a revised scope
+   - publish or select that scope only after worldbuilder authorization
+8. Support explicit authoring commitment of hidden facts when the worldbuilder wants them protected before session exposure.
 
 ### Exit criteria
 
 - Content domains resolve through SSR contracts and are reflected in projections.
 - Mechanical representation of content (if any) is linked to canonical components and SRD rules.
 - A character can be canonically wrong: recording a statement or belief does not make its subject true unless an explicit propagation policy promotes it.
+- Runtime and LLM routes cannot perform editorial supersession.
+- A rebaseline leaves its source scope unchanged and replayable, and its revised scope independently passes validation.
 
 ## Phase 8: LAN Validation UI (Client)
 
@@ -211,6 +232,8 @@ Provide an internal LAN-accessible debugging and validation surface without engi
    - submit intents and observations
    - replay event logs
    - inspect projections and hidden state boundaries
+   - distinguish canonical facts from noncanonical working material
+   - preview rebaseline impact and submit separately authorized worldbuilder requests
 2. Keep all rule calculations server-side.
 3. Include debug views for rejections, retries, and deterministic seeds.
 
@@ -218,6 +241,7 @@ Provide an internal LAN-accessible debugging and validation surface without engi
 
 - UI can reproduce reported bugs by replaying saved event logs.
 - UI cannot apply hidden-state logic outside backend responses.
+- UI cannot turn a preview, draft, or rebaseline proposal into canonical state without backend validation and worldbuilder authorization.
 
 ## Phase 9: Acceptance Validation
 
@@ -234,6 +258,9 @@ Prove conformance to the SRD-backed, no-retcon engine contract.
 - Progressive facet-resolution tests that preserve committed facets while leaving unrelated facets latent
 - Claim-layer tests for world facts, observations, beliefs, utterances, rumors, and promoted constraints
 - Narration-grounding tests for persistent player-facing assertions
+- Working-material isolation and compatible-preservation reconciliation tests
+- Session-exposure tests that freeze asserted facets without freezing unrelated facets
+- Rebaseline tests proving that source scopes remain unchanged and runtime/LLM routes lack supersession authority
 - Multi-run uniqueness checks for high-level generated sessions
 - LAN validation UI scenario tests (scenario submit/observe/replay)
 
